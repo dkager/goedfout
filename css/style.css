@@ -1,0 +1,677 @@
+:root {
+  --wall: #e8e2d8;
+  --wall-dark: #d9d1c4;
+  --paper: #fdfcf8;
+  --ink-blue: #1f3f8f;
+  --ink-black: #262626;
+  --ink-red: #b3261e;
+  --ink-green: #1d6b3a;
+  /* Markerkleuren voor steekwoorden ("color" bij een keyword). Allemaal minstens 4,5:1
+     contrast op het papier (--paper); geel en oranje zijn daarom donker zoals echte markers. */
+  --marker-blue: var(--ink-blue);
+  --marker-red: var(--ink-red);
+  --marker-black: var(--ink-black);
+  --marker-green: var(--ink-green);
+  --marker-yellow: #8f6a00;
+  --marker-orange: #b95200;
+  --marker-purple: #6b2d94;
+  --marker-pink: #b42a6e;
+  --sticky: #fde96b;
+  --sticky-edge: #f2d63e;
+  --hand: 'Caveat', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  --marker: 'Permanent Marker', 'Caveat', 'Segoe Print', 'Comic Sans MS', cursive;
+  --ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Afmetingen van de geeltjes: worden door app.js aangepast aan het aantal onderwerpen */
+  --sw: 104px;
+  --sh: 80px;
+  --sfont: 22px;
+  --sper: 2;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: #2b2925;
+  font-family: var(--ui);
+  overflow: hidden;
+}
+[hidden] { display: none !important; }
+
+/* ---------- Wachtwoordscherm ---------- */
+.login {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 35%, var(--wall), var(--wall-dark));
+  padding: 16px;
+}
+.login-card {
+  width: min(380px, 100%);
+  background: var(--paper);
+  padding: 32px 28px 24px;
+  border-radius: 4px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.1);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.login-card h1 { margin: 0; font-family: var(--marker); font-weight: 400; font-size: 34px; color: var(--ink-blue); }
+.login-card p { margin: 0; color: #555; font-size: 15px; line-height: 1.4; }
+.login-card input {
+  font: inherit; font-size: 16px; padding: 11px 12px;
+  border: 1.5px solid #c9c2b5; border-radius: 4px; background: #fff;
+}
+.login-card input:focus { outline: 2px solid var(--ink-blue); outline-offset: 1px; border-color: transparent; }
+.login-card button {
+  font: inherit; font-size: 16px; font-weight: 600; padding: 11px;
+  border: 0; border-radius: 4px; background: var(--ink-blue); color: #fff; cursor: pointer;
+}
+.login-card button:disabled { opacity: .6; cursor: progress; }
+.login-error { color: var(--ink-red) !important; min-height: 1.2em; font-size: 14px !important; }
+
+/* ---------- Podium ---------- */
+.viewport { position: fixed; inset: 0; overflow: hidden; background: var(--wall); }
+.stage {
+  position: absolute; left: 0; top: 0;
+  width: 1600px; height: 900px;
+  transform-origin: 0 0;
+}
+/* Muur en vloer lopen ver buiten het podium door, zodat er in een venster met een andere
+   verhouding dan 16:9 geen randen of balken te zien zijn. Omdat dit vlak meeschaalt met
+   het podium, ligt de vloerlijn altijd op dezelfde hoogte (y = 792, 88%).
+   Maten in px vanaf de bovenkant van dit vlak, dat 1200px boven het podium begint. */
+.stage::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none;
+  left: -3000px; right: -3000px; top: -1200px; bottom: -1200px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.25) 1200px, rgba(255,255,255,0) 1560px),
+    linear-gradient(180deg, var(--wall) 1992px, #cfc6b7 1992px, #c4baa9 2100px, #b8ad99 2700px);
+}
+
+/* ---------- Flip-overs ---------- */
+.easel { position: absolute; top: 28px; width: 340px; height: 860px; }
+.easel-left  { left: 34px; }
+.easel-right { right: 34px; }
+.easel-clamp {
+  position: relative; z-index: 3;
+  height: 26px; margin: 0 -8px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #5d5d5d, #3a3a3a);
+  box-shadow: 0 3px 5px rgba(0,0,0,.3);
+}
+/* Twee metalen draaiknoppen: de balk is een klem die de vellen vasthoudt */
+.easel-clamp::before,
+.easel-clamp::after {
+  content: ''; position: absolute; top: 4px; width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f2f2f2 0%, #b8b8b8 45%, #6e6e6e 100%);
+  box-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.easel-clamp::before { left: 22%; }
+.easel-clamp::after  { right: 22%; }
+.pad {
+  position: relative; z-index: 2;
+  height: 690px;
+  margin-top: -6px;
+  perspective: 1400px;
+  background: #4a4a4a;
+  padding: 0 0 8px;
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 10px 18px rgba(0,0,0,.18);
+}
+.sheet {
+  position: absolute; inset: 0 0 12px 0; /* onderaan blijft de stapel vellen zichtbaar */
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.035), transparent 6%, transparent 94%, rgba(0,0,0,.035)),
+    var(--paper);
+  padding: 34px 26px 22px;
+  overflow: hidden;
+  transform-origin: 50% 0;
+  backface-visibility: hidden;
+}
+/* Stapel vellen eronder suggereren */
+/* Stapel vellen onder het voorste vel: een blok papier, geen losse poster */
+.pad::after {
+  content: ''; position: absolute; left: 2px; right: 2px; bottom: 1px; height: 12px;
+  background: repeating-linear-gradient(180deg, #f4f1e8 0 2px, #c9c2b3 2px 3px);
+  border-radius: 0 0 2px 2px;
+  box-shadow: 0 2px 2px rgba(0,0,0,.25);
+  z-index: -1;
+}
+.sheet.turning { z-index: 5; box-shadow: 0 10px 25px rgba(0,0,0,.25); pointer-events: none; }
+
+.easel-legs { position: absolute; left: 0; right: 0; top: 700px; height: 160px; z-index: 1; }
+.easel-legs span {
+  position: absolute; top: 0; width: 9px; height: 160px; border-radius: 3px;
+  background: linear-gradient(90deg, #3f3f3f, #6a6a6a);
+}
+.easel-legs span:nth-child(1) { left: 30px;  transform: rotate(9deg);  transform-origin: top; }
+.easel-legs span:nth-child(2) { left: 166px; height: 150px; opacity: .55; }
+.easel-legs span:nth-child(3) { right: 30px; transform: rotate(-9deg); transform-origin: top; }
+
+.sheet-heading {
+  margin: 0 0 14px;
+  font-family: var(--marker); font-weight: 400;
+  font-size: 40px; color: var(--ink-green);
+  transform: rotate(-2deg);
+}
+/* Titel van een vel steekwoorden: markerletters in de standaardkleur, met een blauwe
+   (met de hand getrokken) lijn eronder. Daaronder beginnen de steekwoorden. */
+.sheet-title {
+  margin: 0 0 18px;
+  padding-bottom: 8px;
+  border-bottom: 4px solid var(--marker-blue);
+  border-radius: 0 0 3px 2px;
+  font-family: var(--marker); font-weight: 400;
+  font-size: 34px; line-height: 1.15;
+  color: var(--marker-blue);
+  transform: rotate(-1deg);
+  overflow-wrap: break-word;
+}
+.sheet-list {
+  list-style: none; margin: 0; padding: 0;
+  font-family: var(--hand); font-weight: 700;
+  font-size: var(--list-font, 32px);
+  line-height: 1.12;
+}
+.sheet-list li {
+  position: relative;
+  padding-left: 1.0em;
+  margin-bottom: .32em;
+}
+.keyword-list li { color: var(--marker-blue); } /* standaardkleur */
+.keyword-list li[data-color="blue"]   { color: var(--marker-blue); }
+.keyword-list li[data-color="red"]    { color: var(--marker-red); }
+.keyword-list li[data-color="black"]  { color: var(--marker-black); }
+.keyword-list li[data-color="green"]  { color: var(--marker-green); }
+.keyword-list li[data-color="yellow"] { color: var(--marker-yellow); }
+.keyword-list li[data-color="orange"] { color: var(--marker-orange); }
+.keyword-list li[data-color="purple"] { color: var(--marker-purple); }
+.keyword-list li[data-color="pink"]   { color: var(--marker-pink); }
+/* Opsommingsteken per inspringniveau: stip, kleinere stip, streepje. --pt is de extra ruimte
+   boven de tekst bij een lijn erboven, zodat het teken op de hoogte van de tekst blijft. */
+.keyword-list li { --pt: 0em; }
+.keyword-list li::before {
+  content: ''; position: absolute; left: .1em; top: calc(.48em + var(--pt));
+  width: .42em; height: .42em; border-radius: 50%;
+  background: var(--ink-red);
+}
+.keyword-list li[data-indent="1"] { margin-left: 1.1em; }
+.keyword-list li[data-indent="2"] { margin-left: 2.2em; }
+.keyword-list li[data-indent="1"]::before { left: .16em; top: calc(.55em + var(--pt)); width: .3em; height: .3em; }
+.keyword-list li[data-indent="2"]::before { left: .1em; top: calc(.62em + var(--pt)); width: .45em; height: .12em; border-radius: .06em; }
+/* Genummerd: het nummer (gezet door renumber() in app.js) in plaats van het teken */
+.keyword-list li[data-numbered] { padding-left: 1.4em; }
+.keyword-list li[data-numbered]::before {
+  content: attr(data-num) '.';
+  left: 0; top: var(--pt);
+  width: auto; height: auto; border-radius: 0;
+  background: none; color: var(--ink-red);
+}
+/* Ruimte boven een steekwoord: witruimte, of een dikke lijn (zoals onder de titel) */
+.keyword-list li[data-gap="space"] { margin-top: .75em; }
+.keyword-list li[data-gap="line"] {
+  --pt: .35em;
+  margin-top: .5em; padding-top: var(--pt);
+  border-top: 4px solid var(--marker-blue);
+}
+.keyword-list li:nth-child(odd)  { transform: rotate(-.6deg); }
+.keyword-list li:nth-child(even) { transform: rotate(.5deg); }
+.tips-list li { color: var(--ink-black); }
+.tips-list li::before {
+  content: '★'; position: absolute; left: 0; top: .02em;
+  color: var(--ink-green); font-size: .8em;
+}
+
+/* Zelf toegevoegde tips: rood plusje in plaats van een ster */
+.tips-list li.user::before { content: '+'; color: var(--ink-red); font-size: 1em; top: -.04em; left: .05em; }
+
+/* Plusje rechtsboven op de Tips-flip-over */
+.add-tip {
+  position: absolute; top: 30px; right: 22px;
+  width: 44px; height: 44px; padding: 0 0 4px;
+  border: 2.5px solid var(--ink-green); border-radius: 50%;
+  background: transparent; color: var(--ink-green);
+  font-family: var(--marker); font-size: 34px; line-height: 1;
+  cursor: pointer; opacity: .45;
+  transform: rotate(-4deg);
+  transition: opacity .2s, transform .2s;
+}
+.add-tip:hover, .add-tip:focus-visible { opacity: 1; transform: rotate(-4deg) scale(1.08); }
+.add-tip:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 2px; }
+
+/* Eén regel tekstinvoer onder de tips */
+.tip-form { margin-top: 4px; }
+.tip-form input {
+  width: 100%;
+  padding: 2px 0 2px 1em;
+  border: 0; border-bottom: 2.5px dashed rgba(38,38,38,.4); border-radius: 0;
+  background: transparent; color: var(--ink-black);
+  font-family: var(--hand); font-weight: 700; font-size: 30px;
+}
+.tip-form input:focus { outline: none; border-bottom-color: var(--ink-green); }
+.tip-form input::placeholder { color: rgba(38,38,38,.35); }
+
+/* ---------- Bewerken (?edit) ---------- */
+/* Tips, steekwoorden en de vraag zijn aanklikbaar; bij aanwijzen een gestippelde rand */
+.edit-mode .tips-list li,
+.edit-mode .keyword-list li,
+.edit-mode .q-text { cursor: text; }
+.edit-mode .q-text { pointer-events: auto; } /* het vraagvlak zelf laat klikken door */
+.edit-mode .tips-list li:hover,
+.edit-mode .keyword-list li:hover,
+.edit-mode .q-text:hover { outline: 2px dashed rgba(31,63,143,.35); outline-offset: 3px; border-radius: 4px; }
+
+/* Het tekstvak neemt het handschrift en de kleur van de regel over */
+.edit-box { display: flex; flex-direction: column; gap: 6px; }
+.inline-edit {
+  width: 100%; min-width: 0;
+  padding: 0 2px; margin: 0;
+  border: 0; border-bottom: 2.5px dashed currentColor; border-radius: 0;
+  background: rgba(255,255,255,.9);
+  font: inherit; color: inherit; line-height: inherit;
+}
+.inline-edit:focus { outline: none; background: #fffbe0; }
+.q-text .inline-edit { text-align: inherit; }
+/* Tekstvak met de Verwijder-knop ernaast */
+.edit-row { display: flex; align-items: flex-start; gap: 8px; }
+/* Op de flip-overs mag het vak in de rechter papierrand doorlopen, zodat de tekst ondanks de
+   knop even breed blijft als op het vel en woorden niet midden in breken */
+.sheet-list .edit-box { margin-right: -22px; }
+.edit-row .inline-edit { flex: 1 1 auto; width: auto; }
+textarea.inline-edit { display: block; resize: none; overflow: hidden; }
+.edit-delete { margin-top: 6px; } /* ongeveer midden op de eerste regel */
+.edit-delete {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 1.5px solid var(--ink-red); border-radius: 5px;
+  background: #fff; color: var(--ink-red);
+  cursor: pointer;
+}
+.edit-delete:hover { background: var(--ink-red); color: #fff; }
+.edit-delete:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 2px; }
+/* Instellingen onder het tekstvak (kleur, inspringen, genummerd, ruimte erboven, nieuwe klik) */
+.edit-opts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  font: 600 14px/1.2 var(--ui); color: var(--ink-black);
+}
+.edit-opts select {
+  padding: 2px 4px;
+  border: 1.5px solid #c9c2b5; border-radius: 4px;
+  background: #fff; color: var(--ink-black); font: inherit;
+}
+.edit-opts label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer; }
+.edit-opts input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--ink-blue); }
+.edit-opts select:focus, .edit-opts input:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 1px; }
+.edit-opts label:has(input:disabled) { opacity: .5; cursor: default; }
+
+/* In de bewerkmodus voeg je toe via "Toevoegen" in de bedieningsbalk, niet via het plusje */
+.edit-mode .add-tip { display: none; }
+
+/* Toevoegmenu, boven de knop in de bedieningsbalk */
+.controls.menu-open { opacity: 1; } /* .controls is position: fixed en dus het ankerpunt */
+.add-menu {
+  position: absolute; right: 0; bottom: calc(100% + 8px);
+  display: flex; flex-direction: column;
+  min-width: 230px; padding: 6px;
+  background: #24282d; color: #e8eaed;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px #4a5058, 0 10px 24px rgba(0,0,0,.35);
+}
+.add-menu[hidden] { display: none; }
+.controls .add-menu button {
+  width: 100%; height: auto;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 8px 10px; border-radius: 6px;
+  font-size: 15px; font-weight: 600; text-align: left;
+}
+.add-menu small { font-size: 12px; font-weight: 400; color: #a7b0b8; }
+.controls .add-menu button:hover,
+.controls .add-menu button:focus-visible { background: rgba(255,255,255,.12); outline: none; }
+
+/* Label in de bedieningsbalk */
+.edit-badge { margin-left: 4px; padding: 3px 8px; border-radius: 10px; background: #ffd666; color: #3a2a00; font-weight: 600; white-space: nowrap; }
+
+/* ---------- Whiteboard ---------- */
+.whiteboard {
+  position: absolute; left: 404px; top: 46px;
+  width: 792px; height: 740px;
+}
+.wb-surface {
+  position: absolute; inset: 0 0 34px 0;
+  border: 13px solid transparent;
+  border-image: linear-gradient(135deg, #e4e7ea, #9da3a8 40%, #d6d9dc 60%, #8e9499) 1;
+  background:
+    linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,.75) 42%, rgba(255,255,255,0) 54%),
+    linear-gradient(180deg, #ffffff, #f2f4f5);
+  box-shadow: 0 14px 28px rgba(0,0,0,.2), 0 3px 6px rgba(0,0,0,.12);
+  display: flex; flex-direction: column;
+  padding: 16px 22px 18px;
+}
+.wb-tray {
+  position: absolute; left: 70px; right: 70px; bottom: 14px; height: 22px;
+  background: linear-gradient(180deg, #c8ccd0, #8f959a);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 10px rgba(0,0,0,.2);
+}
+/* Whiteboardstiften: witte huls met een gekleurd etiket en een gekleurde dop, zodat ze ook op
+   de grijze pennenbak als stift herkenbaar zijn (niet als streepjes). --c is de inktkleur. */
+.marker {
+  position: absolute; top: -7px; width: 78px; height: 13px; border-radius: 6px 3px 3px 6px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f1f1 55%, #d6d6d6 100%);
+  box-shadow: 0 2px 3px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.18);
+}
+.marker::before { /* etiket op de huls */
+  content: ''; position: absolute; left: 12px; top: 2px; width: 28px; height: 9px; border-radius: 2px;
+  background: var(--c);
+}
+.marker::after { /* dop, met een rand waar hij op de huls schuift */
+  content: ''; position: absolute; right: -6px; top: -2px; width: 24px; height: 17px; border-radius: 3px 8px 8px 3px;
+  background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(0,0,0,.15)), var(--c);
+  box-shadow: inset 3px 0 0 rgba(0,0,0,.3), 0 2px 3px rgba(0,0,0,.35);
+}
+.m-blue  { left: 40px;  --c: var(--ink-blue); }
+.m-red   { left: 135px; --c: var(--ink-red); }
+.m-black { left: 230px; --c: var(--ink-black); transform: rotate(-4deg); }
+
+/* ---------- Doelen (bovenaan het bord) ---------- */
+/* Alleen de doelen zelf: een met de hand getekend vakje en de tekst, in twee kolommen,
+   zonder kop of lijnen. Een vinkje wordt in groene marker in het vakje "getekend". */
+.wb-goals {
+  flex: 0 0 auto;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 30px;
+  margin: 0 0 14px; padding: 2px 8px 0; list-style: none;
+  font-family: var(--hand); font-weight: 700; font-size: 27px; line-height: 1.15;
+  color: var(--ink-black);
+}
+.wb-goals[hidden] { display: none; }
+.goal { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.goal-box {
+  position: relative; flex: 0 0 auto;
+  margin-top: 2px; /* op de hoogte van de eerste regel, ook bij een doel van twee regels */
+  width: 28px; height: 28px;
+  border: 3.5px solid var(--ink-black); border-radius: 3px 5px 3px 4px;
+  transform: rotate(var(--rot, -2deg));
+}
+.goal:nth-child(2) .goal-box { --rot: 2deg; }
+.goal:nth-child(3) .goal-box { --rot: 1deg; }
+.goal:nth-child(4) .goal-box { --rot: -3deg; }
+/* Het vinkje steekt, zoals met de hand gezet, iets buiten het vakje uit */
+.goal-check {
+  position: absolute; left: -4px; top: -12px; width: 40px; height: 40px; overflow: visible;
+  fill: none; stroke: var(--ink-green); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60; /* nog niet getekend */
+}
+.goal.checked .goal-check { stroke-dashoffset: 0; }
+.goal-text { min-width: 0; overflow-wrap: break-word; }
+
+/* Alleen voor schermlezers */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.kanban {
+  position: relative;
+  flex: 1 1 auto;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  min-height: 0;
+}
+
+/* ---------- Vraagzone (onderaan het bord, waar vroeger de werkafspraken stonden) ---------- */
+.wb-bottom {
+  flex: 0 0 150px; /* vaste hoogte: het kanbanbord verspringt niet als er een vraag komt */
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 3px dashed rgba(38,38,38,.35);
+  min-height: 0;
+}
+.wb-question {
+  height: 100%;
+  display: flex; align-items: center; gap: 22px;
+  padding: 0 10px;
+  overflow: hidden;
+}
+.q-mark {
+  display: grid; place-items: center;
+  width: 72px; height: 72px; flex: 0 0 auto;
+  border: 4px solid var(--ink-red); border-radius: 50%;
+  font-family: var(--marker); font-size: 48px; line-height: 1;
+  color: var(--ink-red);
+  transform: rotate(-6deg);
+}
+.q-text {
+  flex: 1 1 auto; min-width: 0;
+  margin: 0;
+  font-family: var(--marker); font-weight: 400;
+  font-size: var(--q-font, 40px); line-height: 1.2;
+  color: var(--ink-blue); text-align: left;
+  transform: rotate(-1deg);
+  overflow-wrap: break-word;
+}
+.kb-col {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 0 8px;
+  min-height: 0;
+}
+.kb-col + .kb-col::before {
+  /* Met de hand getrokken scheidingslijn */
+  content: ''; position: absolute; left: -1px; top: 4px; bottom: 6px; width: 3px;
+  background: var(--ink-black); border-radius: 2px; opacity: .82;
+  transform: rotate(.4deg);
+}
+.kb-col h3 {
+  margin: 0 0 12px; padding-bottom: 6px;
+  text-align: center;
+  font-family: var(--marker); font-weight: 400; font-size: 30px;
+  color: var(--ink-blue);
+  border-bottom: 3px solid rgba(38,38,38,.82);
+  border-radius: 0 0 2px 2px;
+}
+.kb-col[data-col="doing"] h3 { color: var(--ink-red); }
+.kb-col[data-col="done"]  h3 { color: var(--ink-green); }
+
+.kb-cards {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--sper), var(--sw));
+  grid-auto-rows: var(--sh);
+  gap: 10px 10px;
+  justify-content: center;
+  align-content: start;
+  padding-top: 4px;
+}
+#col-doing { grid-template-columns: var(--sw); }
+
+/* ---------- Geeltjes ---------- */
+.sticky {
+  width: var(--sw); height: var(--sh);
+  cursor: pointer;
+  position: relative;
+  border: 0; padding: 0; background: none;
+  font: inherit;
+}
+.sticky .note {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  padding: 6px 7px 8px;
+  background: linear-gradient(170deg, #fff38f 0%, var(--sticky) 45%, var(--sticky-edge) 100%);
+  box-shadow: 1px 3px 4px rgba(0,0,0,.18), 0 10px 10px -8px rgba(0,0,0,.25);
+  transform: rotate(var(--rot, 0deg));
+  font-family: var(--hand); font-weight: 700;
+  font-size: var(--sfont); line-height: 1.0;
+  color: #2b2a26; text-align: center;
+  overflow: hidden;
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+.sticky .note::after {
+  /* Plakstrook bovenaan */
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 22%;
+  background: linear-gradient(180deg, rgba(0,0,0,.035), transparent);
+}
+.sticky:hover .note, .sticky:focus-visible .note {
+  transform: rotate(var(--rot, 0deg)) scale(1.06);
+  box-shadow: 2px 6px 10px rgba(0,0,0,.25);
+}
+.sticky:focus-visible { outline: none; }
+.sticky:focus-visible .note { outline: 3px solid var(--ink-blue); outline-offset: 2px; }
+.sticky.moving { z-index: 20; }
+/* Opgepakt geeltje: duidelijk van het bord getild */
+.sticky.moving .note { box-shadow: 6px 18px 22px rgba(0,0,0,.26), 0 3px 6px rgba(0,0,0,.14); }
+
+/* ---------- Werkafspraken (overlay over het hele bord, met de knop in de bedieningsbalk) ---------- */
+.agreements {
+  position: absolute; inset: 0; z-index: 40; /* boven verschuivende geeltjes (z-index 20) */
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 40px 70px;
+  /* Het bord eronder is bijna helemaal weggeveegd */
+  background: radial-gradient(ellipse at 50% 45%, rgba(255,255,255,.99) 60%, rgba(255,255,255,.94) 100%);
+  overflow: hidden;
+}
+.agreements h3 {
+  margin: 0 0 24px;
+  font-family: var(--marker); font-weight: 400; font-size: 52px;
+  color: var(--ink-red);
+  transform: rotate(-2deg);
+}
+.agreements ul {
+  list-style: none; margin: 0; padding: 0;
+  font-family: var(--hand); font-weight: 700; font-size: 40px; line-height: 1.2;
+  color: var(--ink-black);
+}
+.agreements li { padding-left: 1.1em; position: relative; margin-bottom: 10px; }
+.agreements li::before { content: '✓'; position: absolute; left: 0; color: var(--ink-blue); }
+
+/* ---------- Bediening ---------- */
+.controls {
+  position: fixed; right: 14px; bottom: 12px; z-index: 50;
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px;
+  background: rgba(30,30,30,.72); color: #eee;
+  border-radius: 20px;
+  font-size: 13px;
+  opacity: 0; transition: opacity .3s;
+}
+.controls.visible, .controls:hover, .controls:focus-within { opacity: 1; }
+.controls button {
+  font: inherit; font-size: 18px; line-height: 1;
+  width: 30px; height: 28px; border: 0; border-radius: 14px;
+  background: transparent; color: inherit; cursor: pointer;
+}
+.controls button:hover { background: rgba(255,255,255,.15); }
+.controls button:disabled { opacity: .35; cursor: default; background: transparent; }
+.controls button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+/* Op het startscherm en de laatste inhoud wordt "volgende" een duidelijke knop: "Start" of "Einde" */
+.controls button.labeled { width: auto; padding: 0 10px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+#progress { min-width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ---------- Start- en afsluitscherm (donkere modus) ---------- */
+/* Contrast op --end-bg: titel 16:1, toelichting 8,4:1, knoptekst op de knop 8,5:1 */
+.dark-screen {
+  --end-bg: #121417;
+  --end-text: #eceff1;
+  --end-muted: #a7b0b8;
+  --end-accent: #3ccf7e;
+  --end-accent-hover: #5fdc96;
+  --end-on-accent: #0d1f14;
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 40px; padding: 24px;
+  background: radial-gradient(ellipse at 50% 40%, #1b1f24 0%, var(--end-bg) 70%);
+  color: var(--end-text);
+  font-family: var(--ui);
+  text-align: center;
+}
+.dark-title {
+  margin: 0;
+  font-size: clamp(56px, 14vmin, 160px); font-weight: 800;
+  letter-spacing: .18em; padding-left: .18em; /* letterspatiëring optisch centreren */
+  line-height: 1;
+}
+/* "WELKOM" met daaronder de titel van de presentatie, als één blok */
+.dark-heading { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.dark-subtitle {
+  margin: 0; max-width: 28em;
+  font-size: clamp(20px, 3.6vmin, 36px); font-weight: 500; line-height: 1.3;
+  color: #c3cad1; /* lichtgrijs: rustiger dan WELKOM, ruim leesbaar op de donkere achtergrond */
+  text-wrap: balance;
+}
+.dark-subtitle[hidden] { display: none; }
+.end-download { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.end-download[hidden] { display: none; }
+.end-download-link {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 18px 34px; border-radius: 14px;
+  background: var(--end-accent); color: var(--end-on-accent);
+  font-size: clamp(18px, 3.2vmin, 28px); font-weight: 700; text-decoration: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  transition: background .15s, transform .15s;
+}
+.end-download-link span { font-size: 1.2em; line-height: 1; }
+.end-download-link:hover { background: var(--end-accent-hover); transform: translateY(-1px); }
+.end-download-link:focus-visible { outline: 3px solid var(--end-text); outline-offset: 4px; }
+.end-note { margin: 0; max-width: 34em; text-wrap: balance; color: var(--end-muted); font-size: clamp(14px, 2vmin, 17px); line-height: 1.5; }
+
+/* De bediening blijft op het start- en afsluitscherm zichtbaar, met een rand zodat hij loskomt van de donkere achtergrond */
+.controls.on-dark {
+  opacity: 1;
+  background: #24282d; color: #e8eaed;
+  box-shadow: inset 0 0 0 1px #4a5058;
+}
+
+/* PDF-knop op het afsluitscherm: omlijnd, zodat hij niet verward wordt met de (groene) download */
+.end-pdf { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.end-button {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 16px 32px; border-radius: 14px;
+  border: 2px solid var(--end-accent); background: transparent; color: var(--end-text);
+  font: inherit; font-size: clamp(18px, 3.2vmin, 28px); font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, transform .15s;
+}
+.end-button svg { flex: none; color: var(--end-accent); }
+.end-button:hover { background: rgba(60, 207, 126, .12); transform: translateY(-1px); }
+.end-button:focus-visible { outline: 3px solid var(--end-text); outline-offset: 4px; }
+
+/* ---------- Afdrukken: de vellen op A4 (zie preparePrint() in app.js) ---------- */
+/* Op het scherm onzichtbaar, maar wel opgemaakt: fitList() moet kunnen meten. */
+.print-root {
+  position: fixed; left: 0; top: 0; z-index: -1;
+  visibility: hidden; pointer-events: none;
+}
+.print-page {
+  width: 210mm; height: 296.5mm; /* een fractie kleiner dan A4: geen lege pagina door afronding */
+  padding: 11mm 14mm 9mm;
+  display: flex; flex-direction: column; gap: 5mm;
+  overflow: hidden;
+  background: #fff;
+  font-family: var(--ui); color: #3a3a3a;
+  break-after: page;
+}
+.print-page:last-child { break-after: auto; }
+.print-header, .print-footer {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8mm;
+  font-size: 10pt; line-height: 1.3;
+}
+.print-header { padding-bottom: 2.5mm; border-bottom: .5pt solid #9a9a9a; }
+.print-title { font-weight: 700; color: #1a1a1a; }
+.print-date { white-space: nowrap; }
+.print-footer { padding-top: 2mm; border-top: .5pt solid #c8c8c8; font-size: 9pt; color: #555; }
+.print-pagenr { white-space: nowrap; }
+.print-sheet-box { position: relative; flex: 1 1 auto; min-height: 0; }
+/* Het vel zelf: dezelfde opmaak als op de flip-over (letters, kleuren, opsommingstekens),
+   op wit papier met een dun randje in plaats van crème met een stapel eronder. */
+.print-root .sheet {
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+  background: #fff;
+  border: 1px solid #c9c2b3; border-radius: 2px;
+}
+
+@page { size: A4 portrait; margin: 0; } /* geen marge: dan ook geen kop- en voettekst van de browser */
+@media print {
+  html.print-sheets, html.print-sheets body { height: auto; overflow: visible; background: #fff; }
+  html.print-sheets body > :not(.print-root) { display: none !important; }
+  html.print-sheets .print-root { position: static; visibility: visible; }
+  /* Opsommingstekens zijn achtergrondkleuren: zonder dit laat de browser ze weg. */
+  .print-root { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

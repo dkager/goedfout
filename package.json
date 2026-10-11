@@ -1,0 +1,10 @@
+{
+  "name": "lean-presentatie",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "encrypt": "node tools/encrypt.js",
+    "decrypt": "node tools/encrypt.js --decrypt",
+    "serve": "npx serve ."
+  }
+}

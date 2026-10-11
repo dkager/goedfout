@@ -1,0 +1,182 @@
+{
+  "title": "Lean in de praktijk",
+  "agreements": [
+    "Telefoons op stil",
+    "Vragen mogen altijd",
+    "Wat niet past, parkeren we",
+    "We starten en stoppen op tijd"
+  ],
+  "goals": [
+    { "id": "waarde", "text": "Weten wat waarde is voor de klant" },
+    { "id": "verspilling", "text": "Verspilling herkennen" },
+    { "id": "flow", "text": "Flow en pull begrijpen" },
+    { "id": "start", "text": "Morgen een eerste stap zetten" }
+  ],
+  "topics": [
+    {
+      "sticky": "Wat is lean?",
+      "sheets": [
+        {
+          "title": "De kern van lean",
+          "steps": [
+            [
+              { "type": "question", "text": "Wat levert jouw team de klant eigenlijk op?" }
+            ],
+            [
+              { "type": "keyword", "text": "Waarde voor de klant" },
+              { "type": "tip", "text": "Vraag de klant wat waarde is" }
+            ],
+            [
+              { "type": "keyword", "text": "Verspilling wegnemen" }
+            ],
+            [
+              { "type": "keyword", "text": "Flow" },
+              { "type": "tip", "text": "Begin op de werkvloer" }
+            ],
+            [
+              { "type": "check", "goal": "waarde" }
+            ]
+          ]
+        },
+        {
+          "title": "Mensen centraal",
+          "steps": [
+            [
+              { "type": "keyword", "text": "Respect voor mensen" }
+            ],
+            [
+              { "type": "keyword", "text": "Continu verbeteren" }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sticky": "De 8 verspillingen",
+      "sheets": [
+        {
+          "title": "Acht soorten verspilling",
+          "steps": [
+            [
+              { "type": "keyword", "text": "TIMWOODS" }
+            ],
+            [
+              { "type": "keyword", "text": "Transport", "indent": 1, "numbered": true },
+              { "type": "keyword", "text": "Inventory", "indent": 1, "numbered": true, "color": "red" },
+              { "type": "keyword", "text": "Motion", "indent": 1, "numbered": true, "color": "black" },
+              { "type": "keyword", "text": "Waiting", "indent": 1, "numbered": true, "color": "green" }
+            ],
+            [
+              { "type": "keyword", "text": "Overproduction", "indent": 1, "numbered": true, "color": "yellow" },
+              { "type": "keyword", "text": "Overprocessing", "indent": 1, "numbered": true, "color": "orange" },
+              { "type": "keyword", "text": "Defects", "indent": 1, "numbered": true, "color": "purple" },
+              { "type": "keyword", "text": "Skills", "indent": 1, "numbered": true, "color": "pink" }
+            ],
+            [
+              { "type": "keyword", "text": "Begin bij wachten", "gap": "line" },
+              { "type": "tip", "text": "Wachten is de makkelijkste om te zien" }
+            ],
+            [
+              { "type": "check", "goal": "verspilling" }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sticky": "Value stream mapping",
+      "sheets": [
+        {
+          "title": "De waardestroom",
+          "steps": [
+            [
+              { "type": "keyword", "text": "Volg één order" }
+            ],
+            [
+              { "type": "keyword", "text": "Doorlooptijd vs. bewerkingstijd" }
+            ],
+            [
+              { "type": "tip", "text": "Loop het proces zelf mee" }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sticky": "Flow & pull",
+      "sheets": [
+        {
+          "title": "Flow",
+          "steps": [
+            [
+              { "type": "keyword", "text": "Kleinere batches" }
+            ],
+            [
+              { "type": "keyword", "text": "WIP-limieten" },
+              { "type": "tip", "text": "Stop met starten, start met afmaken" }
+            ]
+          ]
+        },
+        {
+          "title": "Pull",
+          "steps": [
+            [
+              { "type": "keyword", "text": "Kanban" }
+            ],
+            [
+              { "type": "keyword", "text": "Vraag trekt het werk" },
+              { "type": "check", "goal": "flow" }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sticky": "Kaizen",
+      "sheets": [
+        {
+          "title": "Continu verbeteren",
+          "steps": [
+            [
+              { "type": "keyword", "text": "PDCA" }
+            ],
+            [
+              { "type": "keyword", "text": "Plan", "indent": 1, "numbered": true },
+              { "type": "keyword", "text": "Do", "indent": 1, "numbered": true },
+              { "type": "keyword", "text": "Check", "indent": 1, "numbered": true },
+              { "type": "keyword", "text": "Act", "indent": 1, "numbered": true }
+            ],
+            [
+              { "type": "tip", "text": "Kleine stappen, vaak" }
+            ],
+            [
+              { "type": "keyword", "text": "Gemba", "gap": "space" }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "sticky": "Aan de slag",
+      "sheets": [
+        {
+          "title": "Je eerste stap",
+          "steps": [
+            [
+              { "type": "keyword", "text": "Kies één proces" }
+            ],
+            [
+              { "type": "keyword", "text": "Meet de huidige situatie" }
+            ],
+            [
+              { "type": "tip", "text": "Vier de eerste verbetering" }
+            ],
+            [
+              { "type": "check", "goal": "start" }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

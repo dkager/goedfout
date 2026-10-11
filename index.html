@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Presentatie</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Wachtwoordscherm -->
+  <div id="login" class="login">
+    <form id="login-form" class="login-card" autocomplete="off">
+      <h1>Presentatie</h1>
+      <p>Voer het wachtwoord in om de presentatie te openen.</p>
+      <input id="password" type="password" placeholder="Wachtwoord" autofocus required>
+      <button type="submit">Openen</button>
+      <p id="login-error" class="login-error" role="alert"></p>
+    </form>
+  </div>
+
+  <!-- Het podium: vaste 1600×900 (16:9), wordt geschaald naar het venster; zie fitStage() -->
+  <div id="viewport" class="viewport" hidden>
+    <div id="stage" class="stage">
+
+      <!-- Flip-over links: tips -->
+      <section class="easel easel-left" aria-label="Tips">
+        <div class="easel-clamp"></div>
+        <div class="pad">
+          <div class="sheet" id="tips-sheet">
+            <h2 class="sheet-heading">Tips</h2>
+            <button type="button" class="add-tip" id="add-tip" title="Tip toevoegen" aria-label="Tip toevoegen">+</button>
+            <ul class="sheet-list tips-list" id="tips-list"></ul>
+            <form class="tip-form" id="tip-form" hidden>
+              <input id="tip-input" type="text" maxlength="120" autocomplete="off" placeholder="Nieuwe tip…" aria-label="Nieuwe tip">
+            </form>
+          </div>
+        </div>
+        <div class="easel-legs"><span></span><span></span><span></span></div>
+      </section>
+
+      <!-- Whiteboard: kanban, vraagzone en (op verzoek) de werkafspraken -->
+      <section class="whiteboard" aria-label="Whiteboard">
+        <div class="wb-surface">
+          <!-- Doelen: alleen de tekst met een aankruisvakje per doel (gevuld door app.js); leeg = verborgen -->
+          <ul class="wb-goals" id="goals-list" aria-label="Doelen" hidden></ul>
+          <div class="kanban">
+            <div class="kb-col" data-col="todo"><h3>To do</h3><div class="kb-cards" id="col-todo"></div></div>
+            <div class="kb-col" data-col="doing"><h3>Doing</h3><div class="kb-cards" id="col-doing"></div></div>
+            <div class="kb-col" data-col="done"><h3>Done</h3><div class="kb-cards" id="col-done"></div></div>
+          </div>
+          <!-- Vraagzone onderaan: houdt altijd zijn hoogte, zodat de geeltjes niet verspringen.
+               De voorleesregio staat op de zone zelf (altijd aanwezig), niet op het vraagvlak dat
+               pas bij een vraag zichtbaar wordt: anders kondigen schermlezers de vraag niet aan. -->
+          <div class="wb-bottom" aria-live="polite">
+            <div class="wb-question" id="wb-question" hidden>
+              <span class="q-mark" aria-hidden="true">?</span>
+              <p class="q-text" id="wb-question-text"></p>
+            </div>
+          </div>
+          <!-- Werkafspraken: standaard verborgen, met de knop in de bedieningsbalk over het bord heen -->
+          <div class="agreements" id="agreements" role="region" aria-label="Werkafspraken" hidden>
+            <h3>Werkafspraken</h3>
+            <ul id="agreements-list"></ul>
+          </div>
+        </div>
+        <div class="wb-tray"><i class="marker m-blue"></i><i class="marker m-red"></i><i class="marker m-black"></i></div>
+      </section>
+
+      <!-- Flip-over rechts: steekwoorden -->
+      <section class="easel easel-right" aria-label="Steekwoorden">
+        <div class="easel-clamp"></div>
+        <div class="pad" id="keyword-pad">
+          <div class="sheet" id="keyword-sheet">
+            <!-- Titel van het vel: altijd zichtbaar, ook als het vel verder nog leeg is -->
+            <h2 class="sheet-title" id="keyword-title"></h2>
+            <ul class="sheet-list keyword-list" id="keyword-list"></ul>
+          </div>
+        </div>
+        <div class="easel-legs"><span></span><span></span><span></span></div>
+      </section>
+    </div>
+
+    <!-- Startscherm (donker), vóór de eerste inhoud -->
+    <section id="start-screen" class="dark-screen" aria-label="Welkom" hidden>
+      <div class="dark-heading">
+        <h2 class="dark-title">WELKOM</h2>
+        <!-- De titel van de presentatie ("title" in de JSON); leeg = verborgen -->
+        <p id="start-subtitle" class="dark-subtitle" hidden></p>
+      </div>
+    </section>
+
+    <!-- Afsluitscherm (donker), na de laatste inhoud. De PDF-knop altijd; de downloadlink alleen als de inhoud is gewijzigd. -->
+    <section id="end-screen" class="dark-screen" aria-label="Einde" hidden>
+      <h2 class="dark-title">EINDE</h2>
+      <div class="end-pdf">
+        <button type="button" id="btn-pdf" class="end-button" aria-describedby="end-pdf-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg> Vellen opslaan als PDF
+        </button>
+        <p id="end-pdf-note" class="end-note">Alle vellen en de tips, elk op een A4. Kies in het afdrukvenster ‘Opslaan als PDF’.</p>
+      </div>
+      <div id="end-download" class="end-download" hidden>
+        <a id="btn-download" class="end-download-link" download="content.json">
+          <span aria-hidden="true">⤓</span> Download content.json
+        </a>
+        <p id="end-note" class="end-note"></p>
+      </div>
+    </section>
+
+    <nav class="controls" aria-label="Bediening">
+      <button id="btn-prev" title="Vorige (←)">‹</button>
+      <span id="progress"></span>
+      <button id="btn-next" title="Volgende (→)">›</button>
+      <button id="btn-agreements" class="labeled" aria-pressed="false" aria-controls="agreements"
+              aria-keyshortcuts="W" title="Werkafspraken tonen of verbergen (W)">Werkafspraken</button>
+      <button id="btn-full" title="Volledig scherm (F)">⛶</button>
+      <!-- Alleen met ?edit in de adresbalk -->
+      <span id="edit-badge" class="edit-badge" hidden>✎ Bewerken</span>
+      <button id="btn-add" class="labeled" hidden aria-haspopup="menu" aria-expanded="false"
+              aria-controls="add-menu" title="Item toevoegen aan deze klik (+)">＋ Toevoegen</button>
+      <div id="add-menu" class="add-menu" role="menu" aria-label="Toevoegen" hidden>
+        <button type="button" role="menuitem" data-type="tip">Tip <small>links, op de flip-over</small></button>
+        <button type="button" role="menuitem" data-type="keyword">Steekwoord <small>rechts, op het vel</small></button>
+        <button type="button" role="menuitem" data-type="question">Vraag <small>op het whiteboard</small></button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- Afdrukversie van de vellen (gevuld door app.js vlak voor het afdrukken). Op het scherm
+       onzichtbaar maar wel opgemaakt, zodat de lettergrootte gemeten kan worden. -->
+  <div id="print" class="print-root" aria-hidden="true" inert></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

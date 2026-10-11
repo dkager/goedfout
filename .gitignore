@@ -1,0 +1,6 @@
+# De onversleutelde inhoud mag NOOIT in de repository komen.
+content.json
+*.plain.json
+
+node_modules/
+.DS_Store
