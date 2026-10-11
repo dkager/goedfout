@@ -34,6 +34,9 @@
             <h2 class="sheet-heading">Tips</h2>
             <button type="button" class="add-tip" id="add-tip" title="Tip toevoegen" aria-label="Tip toevoegen">+</button>
             <ul class="sheet-list tips-list" id="tips-list"></ul>
+            <!-- Voorleesregel: alleen de nieuwe tips van de laatste klik (niet de hele lijst, die
+                 bij terugbladeren opnieuw wordt opgebouwd); zie announceTips() in app.js -->
+            <p class="sr-only" id="tips-announcer" aria-live="polite"></p>
             <form class="tip-form" id="tip-form" hidden>
               <input id="tip-input" type="text" maxlength="120" autocomplete="off" placeholder="Nieuwe tip…" aria-label="Nieuwe tip">
             </form>

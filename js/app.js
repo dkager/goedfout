@@ -23,6 +23,7 @@ const els = {
   stage: $('#stage'),
   tipsSheet: $('#tips-sheet'),
   tipsList: $('#tips-list'),
+  tipsAnnouncer: $('#tips-announcer'),
   keywordPad: $('#keyword-pad'),
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
@@ -370,7 +371,12 @@ function render(previous) {
   const newlyChecked = previous === null ? [] : [...goalsDone].filter((id) => !checkedGoalsAt(previous).has(id));
   if (sheetTurned) playPageTurn();
   if (previous !== null && question !== null) playQuestionTone();
-  if (previous !== null && tipsAt(pos).length > tipsAt(previous).length) playBell();
+  const tipsAdded = previous !== null && tipsAt(pos).length > tipsAt(previous).length;
+  if (tipsAdded) playBell();
+  // Nieuwe tips voorlezen, alleen die van de huidige klik: een sprong naar een ander onderwerp
+  // begint op een leeg vel en leest dus niet alle tips van de tussenliggende vellen voor.
+  // Zonder nieuwe tips wordt de voorleesregel leeggemaakt.
+  announceTips(tipsAdded ? (currentStep(pos) ?? []).filter((it) => it.type === 'tip').map((it) => 'Tip: ' + it.text) : []);
   // Het vinkje wordt getekend op het moment dat het schrijfgeluid klinkt (dat kan na de andere zijn).
   const checkAt = newlyChecked.length ? playCheck() : 0;
   renderGoals(goalsDone, animate ? newlyChecked : [], checkAt);
@@ -486,6 +492,16 @@ function renderGoals(checked, drawIds, delay) {
 function renderTips(animate) {
   setList(els.tipsList, tipsAt(pos), animate);
   fitList(els.tipsSheet, els.tipsList, LIST_FONT_MAX, 18);
+}
+
+/**
+ * Laat een schermlezer nieuwe tips voorlezen (de voorleesregel is een aria-live-regio). Eerst
+ * leegmaken en pas daarna vullen, zodat ook dezelfde tekst nog eens wordt voorgelezen.
+ */
+function announceTips(texts) {
+  const el = els.tipsAnnouncer;
+  el.textContent = '';
+  if (texts.length) setTimeout(() => { el.textContent = texts.join(' '); }, 50);
 }
 
 /**
@@ -776,6 +792,7 @@ function submitTip() {
   dirtySheets.add(pos.sheet);
   finishAllAnimations();
   playBell();
+  announceTips(['Tip toegevoegd: ' + text]);
   renderTips(true);
   updateHash();
   updateButtons();

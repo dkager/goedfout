@@ -249,6 +249,7 @@ Eerlijk gezegd is de presentatie vooral visueel. Wat er nu is:
 - De knop "Werkafspraken" meldt of de werkafspraken aan of uit staan, en dat de sneltoets W is. Als ze zichtbaar zijn, vormen ze een gebied met de naam "Werkafspraken"; als ze verborgen zijn, leest een schermlezer ze niet voor.
 - De geeltjes zijn knoppen. Ze lezen hun onderwerp voor en hebben als beschrijving "Ga naar:" gevolgd door het onderwerp.
 - Een vraag wordt automatisch voorgelezen zodra hij verschijnt (de vraagzone is een voorleesregio).
+- Een nieuwe tip wordt ook automatisch voorgelezen, als "Tip:" gevolgd door de tekst. Dat gebeurt alleen voor de tips van de klik die je net doet; bij terugbladeren of een sprong naar een ander onderwerp (via een geeltje) wordt niets voorgelezen. Een tip die je zelf toevoegt, wordt bevestigd met "Tip toegevoegd:" en de tekst.
 - De doelen vormen een lijst met de naam "Doelen". Achter elk doel staat voor een schermlezer "(nog niet afgevinkt)" of "(afgevinkt)". Het afvinken zelf wordt niet automatisch voorgelezen; het schrijfgeluidje geeft het aan.
 - De titel van het vel rechts is een kop; daarmee kun je in een schermlezer per vel navigeren. Ook "Tips" links en de kolomkoppen "To do", "Doing" en "Done" zijn koppen.
 - Het startscherm heet "Welkom" en het afsluitscherm "Einde"; de knoppen daar lezen "Vellen opslaan als PDF" (met de uitleg eronder als beschrijving) en "Download content.json" voor.
@@ -262,7 +263,7 @@ In de bewerkmodus heet het tekstvak "Tip bewerken", "Steekwoord bewerken" of "Vr
 
 Wat er nog niet is:
 
-- Nieuwe steekwoorden en tips, het verschuiven van geeltjes en de voortgang ("2 / 6") worden niet automatisch voorgelezen.
+- Nieuwe steekwoorden, het verschuiven van geeltjes en de voortgang ("2 / 6") worden niet automatisch voorgelezen.
 - De knoppen vorige, volgende en volledig scherm in de bedieningsbalk zijn tekens (pijlen en een kadertje) met alleen een beschrijving als tooltip, geen echte naam. "Start", "Einde", "Werkafspraken" en "＋ Toevoegen" hebben wel een echte naam.
 - Een aantal dingen bestaat alleen in de opmaak en wordt dus niet als tekst doorgegeven: het rode plusteken bij een tijdens de presentatie toegevoegde tip, de kleuren, het inspringen en de lijnen tussen steekwoorden. De nummers bij genummerde steekwoorden komen ook uit de opmaak; of een schermlezer die voorleest, verschilt per schermlezer.
 
