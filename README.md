@@ -49,8 +49,8 @@ In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=...
   "title": "Lean in de praktijk",
   "agreements": ["Telefoons op stil", "Vragen mogen altijd"],
   "goals": [
-    { "id": "verspilling", "text": "Verspilling herkennen" },
-    { "id": "start", "text": "Morgen een eerste stap zetten" }
+    { "id": "doel1", "text": "Verspilling herkennen" },
+    { "id": "doel2", "text": "Morgen een eerste stap zetten" }
   ],
   "topics": [
     {
@@ -74,7 +74,7 @@ In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=...
             [
               { "type": "keyword", "text": "Begin bij wachten", "gap": "line", "color": "red" },
               { "type": "tip", "text": "Wachten is de makkelijkste om te zien" },
-              { "type": "check", "goal": "verspilling" }
+              { "type": "check", "goal": "doel1" }
             ]
           ]
         }
@@ -86,7 +86,7 @@ In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=...
 
 - `title`: titel van de presentatie. Staat op het startscherm onder "WELKOM" en in het browsertabblad (beide pas na het ontsleutelen).
 - `agreements`: werkafspraken. Standaard verborgen; met de knop **Werkafspraken** in de bedieningsbalk (of de toets W) verschijnen ze over het hele whiteboard heen. Zonder `agreements` is er geen knop.
-- `goals`: de doelen van de presentatie, **hooguit 4**. Ze staan de hele presentatie bovenaan het whiteboard, elk met een leeg aankruisvakje. Elk doel heeft een `id` (een kort, uniek woord, waarmee je het afvinkt) en een `text`. Zonder `goals` is er geen doelenstrook en krijgt het kanbanbord die ruimte.
+- `goals`: de doelen van de presentatie, **hooguit 4**. Ze staan de hele presentatie bovenaan het whiteboard, elk met een leeg aankruisvakje. Elk doel heeft een `id` en een `text`. De ids liggen vast: `doel1`, `doel2`, `doel3` en `doel4`, op volgorde en zonder gaten (twee doelen zijn dus altijd `doel1` en `doel2`); hoofdletters maken niet uit. De id bepaalt het vak in de strook: `doel1` linksboven, `doel2` rechtsboven, `doel3` linksonder, `doel4` rechtsonder. De tekst is hooguit **100 tekens**: dan passen vier doelen nog, met kleinere letters, leesbaar op een laptopscherm van 1920×1080. Zonder `goals` is er geen doelenstrook en krijgt het kanbanbord die ruimte.
 - `topics`: de onderwerpen, in volgorde. Elk onderwerp is één geeltje.
 - `sheets`: de vellen op de rechter flip-over. Elk vel heeft:
   - `title` (**verplicht**): de titel bovenaan het vel, in blauwe markerletters met een blauwe lijn eronder. De titel staat er altijd, ook als het vel verder nog leeg is.
@@ -111,7 +111,7 @@ Eigenschappen van een `keyword` (allemaal optioneel):
 Regels:
 
 - Een step heeft hooguit één `question`. De vraag staat er zolang die klik de laatste is, en verdwijnt bij de volgende klik weer.
-- Een afgevinkt doel blijft afgevinkt, ook op latere vellen en onderwerpen. Blader je terug tot vóór de klik met de `check`, dan is het vakje weer leeg. Een `check` met een onbekende `goal`, een dubbele of ontbrekende `id`, of een vijfde doel geeft een melding en wordt overgeslagen.
+- Een afgevinkt doel blijft afgevinkt, ook op latere vellen en onderwerpen. Blader je terug tot vóór de klik met de `check`, dan is het vakje weer leeg. De controle op doelen is streng: een andere `id` dan `doel1`–`doel4` (of niet op volgorde), een lege of te lange tekst, een vijfde doel en een `check` met een `goal` die geen bestaand doel is, zijn allemaal **fouten**. `tools/encrypt.js` weigert dan te versleutelen; de presentatie slaat het over en meldt het in de console.
 - Per klik klinkt elk geluid hooguit één keer (één belletje, ook bij meerdere tips).
 - Een onbekend type, een item zonder tekst, een lege step of een ongeldige eigenschap geeft een melding en wordt overgeslagen of krijgt de standaardwaarde. `tools/encrypt.js` meldt dit al bij het versleutelen, en de motor geeft een waarschuwing in de console. Beide gebruiken dezelfde controle uit `js/content.js`.
 - Een vel zonder titel, of iets wat geen vel is, is een **fout**: `tools/encrypt.js` weigert dan te versleutelen en noemt welk vel het is. Met `?plain` toont de presentatie zo'n vel wel (met een lege titel en een foutmelding in de console), zodat je kunt doorwerken.
@@ -133,6 +133,7 @@ Nieuwe soorten items toevoegen: zie `ITEM_TYPES` in `js/content.js` en de functi
 | Tip toevoegen | **+** (Shift+=) of klik op **+** op de Tips-flip-over, typ, Enter (Esc = annuleren); niet in de bewerkmodus |
 | Vellen als PDF | Knop **Vellen opslaan als PDF** op het afsluitscherm, of Ctrl+P |
 | Vel bewerken (bewerkmodus) | **E**, klik op de rechter flip-over of **Vel bewerken**; opslaan Ctrl+Enter, annuleren Esc |
+| Doel toevoegen (bewerkmodus) | **D** of "+ Doel toevoegen" in de doelenstrook; een doel bewerken: klik op de tekst, of Tab en Enter |
 | Werkafspraken bewerken (bewerkmodus) | eerst W (in beeld), dan **A**, klik op de werkafspraken of **Werkafspraken bewerken**; opslaan Ctrl+Enter, annuleren Esc |
 
 Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daar werken alleen **Start** (knop, pijl rechts of spatie) en volledig scherm (F); vorige, Home/End en tip toevoegen doen niets. Terug vanaf de eerste inhoud brengt je weer op het startscherm.
@@ -144,7 +145,7 @@ Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daa
 **Titel van een vel:** die staat niet in het tekstvak. Klik op de titel bovenaan het vel (of ga er met Tab naartoe en druk op Enter): de titel wordt een invoerveld op dezelfde plek. **Enter** of wegklikken slaat op, **Esc** annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren.
 
 - **Opslaan** (of Ctrl+Enter) verwerkt alles in één keer; daarna is het hele vel in beeld. **Annuleren** (of Esc) gooit alle wijzigingen weg. Wegklikken doet niets, en zolang het tekstvak open is kun je niet bladeren: de pijlen en de geeltjes zijn dan uitgeschakeld en de bladertoetsen doen niets.
-- Eén item per regel. Onder het tekstvak staat dezelfde uitleg kort samengevat; die is algemeen en noemt niets uit de inhoud van de presentatie (dus ook niet de ids van de doelen):
+- Eén item per regel. Onder het tekstvak staat dezelfde uitleg kort samengevat; die is algemeen en noemt niets uit de inhoud van de presentatie:
 
 | Regel | Wordt |
 |---|---|
@@ -157,7 +158,7 @@ Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daa
 | `->`, `-->` of `→` | nieuwe klik |
 | `? tekst` | vraag op het whiteboard; een tweede vraag in dezelfde klik begint vanzelf een nieuwe klik |
 | `! tekst` | tip op de linker flip-over |
-| `+id` | vinkt het doel met die id af (hoofdletters maken niet uit) |
+| `+doel1` t/m `+doel4` | vinkt dat doel af (hoofdletters maken niet uit); een doel dat er niet is, blijft gewone tekst |
 | elke andere regel | steekwoord met bullet |
 
 - Wat na `*`, `-`, `•` of een nummer staat is gewone tekst: `* ? geen vraag` is een steekwoord. Een onbekende kleur of doel-id blijft gewoon tekst; een geldig kleurlabel wordt overal weggehaald (ook uit een vraag of tip), dus `[rood]` kun je niet letterlijk als tekst gebruiken.
@@ -167,7 +168,14 @@ Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daa
 - Kleur en inspringen op een vraag, tip of doel worden genegeerd. Tips worden bij opslaan altijd gewone tips (zonder `"user": true`): in de bewerkmodus presenteer je niet.
 - **Tips** bewerk en voeg je alleen zo toe, via het vel waar ze bij horen. Het plusje op de Tips-flip-over is in de bewerkmodus weg, en een klik op een tip links geeft een melding op welk vel die tip staat.
 - Onderdelen die je niet verandert, blijven precies wat ze waren; op het afsluitscherm tellen alleen echte wijzigingen mee (ook een gewijzigde veltitel).
-- Doelen zelf (de tekst in de strook), de namen van de geeltjes en de titel van de presentatie zijn (nog) niet in de bewerkmodus te bewerken; die zet je in de JSON.
+- De namen van de geeltjes en de titel van de presentatie zijn (nog) niet in de bewerkmodus te bewerken; die zet je in de JSON.
+
+**Doelen bewerken:** de doelen staan altijd bovenaan het whiteboard. Klik op de tekst van een doel (of ga er met Tab naartoe en druk op Enter): die wordt een invoerveld op dezelfde plek. **Enter** of wegklikken slaat op, **Esc** annuleert. Bij aanwijzen, focus en bewerken staat linksboven bij het doel klein zijn code (`+doel2`): die typ je in een vel om het doel af te vinken.
+
+- **Toevoegen** kan alleen op het eerstvolgende lege vak: daar staat "+ Doel toevoegen" (of druk op **D**). Bij vier doelen is er geen leeg vak meer.
+- **Verwijderen:** maak de tekst leeg en sla op. Wordt het doel ergens afgevinkt, dan vraagt een venster eerst of het echt weg moet, met de vellen waar dat gebeurt; die afvinkmomenten verdwijnen mee (en een klik die daardoor leeg wordt ook). De doelen erna schuiven een vak op: verwijder je `doel2`, dan wordt `doel3` het nieuwe `doel2` en `doel4` het nieuwe `doel3`, ook in alle vellen.
+- Een doel is hooguit 100 tekens. Hoe meer tekst, hoe kleiner de letters van de strook, zodat het kanbanbord niet wegschuift.
+- Gewijzigde doelen gaan mee in de download op het afsluitscherm ("de doelen gewijzigd").
 
 **Werkafspraken bewerken:** zet de werkafspraken in beeld (W of de knop **Werkafspraken**; in de bewerkmodus kan dat ook als er nog geen afspraken zijn). Zolang ze in beeld zijn, staat in de bedieningsbalk de knop **Werkafspraken bewerken** (sneltoets **A**); klikken op de werkafspraken zelf werkt ook. Over het whiteboard verschijnt dan hetzelfde soort tekstvak als bij een vel, met één werkafspraak per regel en dezelfde knoppen en toetsen (Opslaan of Ctrl+Enter, Annuleren of Esc).
 
@@ -213,7 +221,7 @@ Een groot, wit whiteboard met een glanzende aluminium rand en een lichte lichtwe
 
 Het bord bestaat uit drie delen, van boven naar beneden.
 
-**Bovenaan de doelen** (als die in de inhoud staan): hooguit vier regels in zwart handschrift, in twee kolommen, zonder kop en zonder lijnen. Voor elk doel staat een met de hand getekend zwart vierkant vakje, iets scheef. Aan het begin zijn alle vakjes leeg. Wordt een doel bereikt, dan wordt er in groene marker een vinkje in het vakje gezet: eerst een korte streek naar beneden, dan een lange omhoog, die net buiten het vakje uitsteekt.
+**Bovenaan de doelen** (als die in de inhoud staan): hooguit vier doelen in zwart handschrift, in twee kolommen en twee rijen (het eerste linksboven, het tweede rechtsboven, dan linksonder en rechtsonder), zonder kop en zonder lijnen. Lange doelen lopen over twee of drie regels; dan worden de letters van de hele strook iets kleiner. Voor elk doel staat een met de hand getekend zwart vierkant vakje, iets scheef. Aan het begin zijn alle vakjes leeg. Wordt een doel bereikt, dan wordt er in groene marker een vinkje in het vakje gezet: eerst een korte streek naar beneden, dan een lange omhoog, die net buiten het vakje uitsteekt. In de bewerkmodus krijgt de tekst van een doel bij aanwijzen een heel lichtblauwe achtergrond, en verschijnt linksboven, half boven het vakje, een klein wit labeltje met grijze letters met de code van het doel (bijvoorbeeld "+doel2"). Zijn er minder dan vier doelen, dan staat op het eerstvolgende vak een vaag gestippeld vakje met in lichtgrijs handschrift "+ Doel toevoegen". Bewerk je een doel, dan wordt de tekst een lichtgeel invoerveld in hetzelfde handschrift, met een gestippelde blauwe lijn eronder.
 
 **Daaronder het kanbanbord**, het grootste deel van het bord. Drie kolommen, gescheiden door met de hand getrokken zwarte lijnen, met elk een kop in markerletters en een streep eronder: "To do" in blauw, "Doing" in rood en "Done" in groen. In de kolommen hangen gele plakbriefjes (geeltjes), elk iets scheef geplakt, met in zwart handschrift de naam van een onderwerp. Elk geeltje is één onderwerp van de presentatie. Aan het begin hangen ze allemaal in To do, behalve het eerste onderwerp, dat in Doing hangt. Het onderwerp dat nu besproken wordt hangt altijd in Doing; afgeronde onderwerpen hangen in Done. Bij het laatste onderwerp hangen alle andere geeltjes in Done. Hoe meer onderwerpen, hoe kleiner de geeltjes, zodat ze altijd in één kolom passen.
 
@@ -278,7 +286,7 @@ Eerlijk gezegd is de presentatie vooral visueel. Wat er nu is:
 - De geeltjes zijn knoppen. Ze lezen hun onderwerp voor en hebben als beschrijving "Ga naar:" gevolgd door het onderwerp.
 - Een vraag wordt automatisch voorgelezen zodra hij verschijnt (de vraagzone is een voorleesregio).
 - Een nieuwe tip wordt ook automatisch voorgelezen, als "Tip:" gevolgd door de tekst. Dat gebeurt alleen voor de tips van de klik die je net doet; bij terugbladeren of een sprong naar een ander onderwerp (via een geeltje) wordt niets voorgelezen. Een tip die je zelf toevoegt, wordt bevestigd met "Tip toegevoegd:" en de tekst.
-- De doelen vormen een lijst met de naam "Doelen". Achter elk doel staat voor een schermlezer "(nog niet afgevinkt)" of "(afgevinkt)". Het afvinken zelf wordt niet automatisch voorgelezen; het schrijfgeluidje geeft het aan.
+- De doelen vormen een lijst met de naam "Doelen". Achter elk doel staat voor een schermlezer "(nog niet afgevinkt)" of "(afgevinkt)". Het afvinken zelf wordt niet automatisch voorgelezen; het schrijfgeluidje geeft het aan. In de bewerkmodus is de tekst van elk doel een knop (naam: de tekst, beschrijving: de code, bijvoorbeeld "+doel2") die je met Tab bereikt en met Enter bewerkt; het invoerveld heet "Tekst van het doel" (of "Nieuw doel") en heeft de code als beschrijving. "+ Doel toevoegen" is een echte knop met sneltoets D. Bij verwijderen vraagt een gewoon dialoogvenster van de browser om bevestiging.
 - De titel van het vel rechts is een kop; daarmee kun je in een schermlezer per vel navigeren. Ook "Tips" links en de kolomkoppen "To do", "Doing" en "Done" zijn koppen.
 - Het startscherm heet "Welkom" en het afsluitscherm "Einde"; de knoppen daar lezen "Vellen opslaan als PDF" (met de uitleg eronder als beschrijving) en "Download content.json" voor.
 - Op het start- en afsluitscherm is de inhoud van de presentatie (whiteboard en flip-overs) volledig weg: een schermlezer leest er niets van voor, en met Tab of zoeken is er niets van te bereiken. Alleen "WELKOM" of "EINDE", de knoppen van het afsluitscherm en de bedieningsbalk zijn er dan.
@@ -297,7 +305,7 @@ Wat er nog niet is:
 
 ## Goed om te weten
 
-- **Hoeveel past er?** Lettergroottes passen zich automatisch aan, maar dit blijft goed leesbaar: hooguit 4 korte doelen (liefst op één regel), tot ongeveer 12 onderwerpen (daarboven worden de geeltjes klein), zo'n 15 korte tips in totaal en ongeveer 10 steekwoorden per vel (de titel neemt bovenaan ook ruimte in; houd hem kort, liefst één of twee regels). Past een flip-over zelfs met de kleinste letters niet meer, dan meldt de console dat (handig tijdens het voorbereiden met `?plain`). Lange losse woorden op een geeltje worden kleiner dan korte.
+- **Hoeveel past er?** Lettergroottes passen zich automatisch aan, maar dit blijft goed leesbaar: hooguit 4 doelen van hooguit 100 tekens (korter leest prettiger), tot ongeveer 12 onderwerpen (daarboven worden de geeltjes klein), zo'n 15 korte tips in totaal en ongeveer 10 steekwoorden per vel (de titel neemt bovenaan ook ruimte in; houd hem kort, liefst één of twee regels). Past een flip-over zelfs met de kleinste letters niet meer, dan meldt de console dat (handig tijdens het voorbereiden met `?plain`). Lange losse woorden op een geeltje worden kleiner dan korte.
 - **Nooit `content.json` committen.** De git-geschiedenis bewaart alles, ook als je het later verwijdert.
 - **Eén gedeeld wachtwoord.** Na een wachtwoordwissel blijven oude versies in de git-geschiedenis te ontsleutelen met het oude wachtwoord.
 - **Lettertypen** komen van Google Fonts (Caveat en Permanent Marker). Wil je dat bezoekers niets naar Google sturen, host ze dan zelf in een map `fonts/` en vervang de `<link>` in `index.html` door `@font-face`-regels.

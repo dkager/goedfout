@@ -7,10 +7,10 @@
     "We starten en stoppen op tijd"
   ],
   "goals": [
-    { "id": "waarde", "text": "Weten wat waarde is voor de klant" },
-    { "id": "verspilling", "text": "Verspilling herkennen" },
-    { "id": "flow", "text": "Flow en pull begrijpen" },
-    { "id": "start", "text": "Morgen een eerste stap zetten" }
+    { "id": "doel1", "text": "Weten wat waarde is voor de klant" },
+    { "id": "doel2", "text": "Verspilling herkennen" },
+    { "id": "doel3", "text": "Flow en pull begrijpen" },
+    { "id": "doel4", "text": "Morgen een eerste stap zetten" }
   ],
   "topics": [
     {
@@ -34,7 +34,7 @@
               { "type": "tip", "text": "Begin op de werkvloer" }
             ],
             [
-              { "type": "check", "goal": "waarde" }
+              { "type": "check", "goal": "doel1" }
             ]
           ]
         },
@@ -77,7 +77,7 @@
               { "type": "tip", "text": "Wachten is de makkelijkste om te zien" }
             ],
             [
-              { "type": "check", "goal": "verspilling" }
+              { "type": "check", "goal": "doel2" }
             ]
           ]
         }
@@ -125,7 +125,7 @@
             ],
             [
               { "type": "keyword", "text": "Vraag trekt het werk" },
-              { "type": "check", "goal": "flow" }
+              { "type": "check", "goal": "doel3" }
             ]
           ]
         }
@@ -172,7 +172,7 @@
               { "type": "tip", "text": "Vier de eerste verbetering" }
             ],
             [
-              { "type": "check", "goal": "start" }
+              { "type": "check", "goal": "doel4" }
             ]
           ]
         }

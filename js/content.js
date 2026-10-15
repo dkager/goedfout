@@ -10,8 +10,22 @@
  */
 export const ITEM_TYPES = new Set(['keyword', 'tip', 'question', 'check']);
 
+/**
+ * De vaste ids van de doelen, in volgorde en dus ook hun vak in de strook bovenaan het
+ * whiteboard: linksboven, rechtsboven, linksonder, rechtsonder. Andere ids zijn ongeldig;
+ * hoofdletters maken niet uit. Doelen staan altijd aaneengesloten: n doelen zijn doel1 t/m doeln.
+ */
+export const GOAL_IDS = ['doel1', 'doel2', 'doel3', 'doel4'];
+
 /** Maximaal aantal doelen in de strook bovenaan het whiteboard. */
-export const GOALS_MAX = 4;
+export const GOALS_MAX = GOAL_IDS.length;
+
+/**
+ * Maximale lengte van de tekst van een doel (tekens). Gemeten: vier doelen van deze lengte passen
+ * nog in de strook met de kleinste letters (22px, op 1920×1080 zo’n 26px op het scherm); bij 110
+ * tekens niet meer.
+ */
+export const GOAL_TEXT_MAX = 100;
 
 /** Markerkleuren voor een keyword (`"color": ...`). Zonder kleur: blauw. Zie --marker-* in style.css. */
 export const KEYWORD_COLORS = new Set(['blue', 'red', 'black', 'green', 'yellow', 'orange', 'purple', 'pink']);
@@ -40,19 +54,26 @@ export function normalizeContent(raw) {
   const errors = [];
   const emptySheet = () => ({ title: '', steps: [] });
 
-  // Doelen: [{ id, text }], hooguit GOALS_MAX. De id is waarmee een "check"-item het doel afvinkt.
+  // Doelen: [{ id, text }], hooguit GOALS_MAX, met de ids doel1, doel2, … op volgorde (zie
+  // GOAL_IDS). Streng: elke afwijking is een fout, zodat tools/encrypt.js weigert. De presentatie
+  // toont wat wel klopt.
   const goals = [];
-  if (raw.goals !== undefined && !Array.isArray(raw.goals)) problems.push('"goals" is geen lijst — geen doelen getoond.');
+  if (raw.goals !== undefined && !Array.isArray(raw.goals)) errors.push('"goals" is geen lijst — geen doelen getoond.');
   (Array.isArray(raw.goals) ? raw.goals : []).forEach((goal, n) => {
     const at = `Doel ${n + 1}`;
-    if (!goal || typeof goal !== 'object' || typeof goal.id !== 'string' || !goal.id.trim() || typeof goal.text !== 'string') {
-      problems.push(`${at}: moet er zo uitzien: { "id": "kort-woord", "text": "…" } — overgeslagen.`);
-    } else if (goals.some((g) => g.id === goal.id)) {
-      problems.push(`${at}: de id "${goal.id}" is al gebruikt — overgeslagen.`);
-    } else if (goals.length >= GOALS_MAX) {
-      problems.push(`${at}: er passen hooguit ${GOALS_MAX} doelen — "${goal.text}" wordt niet getoond.`);
+    const want = GOAL_IDS[n];
+    if (!want) {
+      errors.push(`${at}: er zijn hooguit ${GOALS_MAX} doelen — overgeslagen.`);
+    } else if (!goal || typeof goal !== 'object' || typeof goal.id !== 'string' || typeof goal.text !== 'string') {
+      errors.push(`${at}: moet er zo uitzien: { "id": "${want}", "text": "…" } — overgeslagen.`);
+    } else if (goal.id.trim().toLowerCase() !== want) {
+      errors.push(`${at}: de id moet "${want}" zijn, niet "${goal.id}". De doelen heten doel1 t/m doel${GOALS_MAX}, op volgorde en zonder gaten — overgeslagen.`);
+    } else if (!goal.text.trim()) {
+      errors.push(`${at} (${want}): de tekst is leeg — overgeslagen.`);
     } else {
-      goals.push({ id: goal.id, text: goal.text });
+      const text = goal.text.trim();
+      if (text.length > GOAL_TEXT_MAX) errors.push(`${at} (${want}): de tekst is ${text.length} tekens; hooguit ${GOAL_TEXT_MAX}.`);
+      goals.push({ id: want, text });
     }
   });
   const goalIds = new Set(goals.map((g) => g.id));
@@ -92,10 +113,13 @@ export function normalizeContent(raw) {
             return false;
           }
           if (item.type === 'check') {
-            if (!goalIds.has(item.goal)) {
-              problems.push(`${atItem}: "goal" moet de id van een doel zijn (${[...goalIds].join(', ') || 'er zijn geen doelen'}) — overgeslagen.`);
+            // Streng (een fout), maar hoofdletterongevoelig: "DOEL1" wordt "doel1".
+            const id = typeof item.goal === 'string' ? item.goal.trim().toLowerCase() : '';
+            if (!goalIds.has(id)) {
+              errors.push(`${atItem}: "goal" moet een bestaand doel zijn (${[...goalIds].join(', ') || 'er zijn geen doelen'}), niet "${item.goal}" — overgeslagen.`);
               return false;
             }
+            item.goal = id;
             return true;
           }
           if (typeof item.text !== 'string') {

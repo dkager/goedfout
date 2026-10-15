@@ -369,11 +369,11 @@ body {
   flex: 0 0 auto;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 30px;
   margin: 0 0 14px; padding: 2px 8px 0; list-style: none;
-  font-family: var(--hand); font-weight: 700; font-size: 27px; line-height: 1.15;
+  font-family: var(--hand); font-weight: 700; font-size: var(--goal-font, 27px); line-height: 1.15; /* zie fitGoals() */
   color: var(--ink-black);
 }
 .wb-goals[hidden] { display: none; }
-.goal { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.goal { position: relative; display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
 .goal-box {
   position: relative; flex: 0 0 auto;
   margin-top: 2px; /* op de hoogte van de eerste regel, ook bij een doel van twee regels */
@@ -392,6 +392,34 @@ body {
 }
 .goal.checked .goal-check { stroke-dashoffset: 0; }
 .goal-text { min-width: 0; overflow-wrap: break-word; }
+
+/* Doelen in de bewerkmodus: tekst aanklikbaar, de code (+doel1) bij aanwijzen, focus en bewerken */
+.edit-mode .goal-text { cursor: text; border-radius: 3px; }
+.edit-mode .goal-text:hover { background: rgba(31,63,143,.07); }
+.edit-mode .goal-text:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 2px; }
+.goal-code {
+  position: absolute; left: -6px; top: -14px; z-index: 2;
+  padding: 0 4px; border-radius: 3px;
+  background: #fff; box-shadow: 0 0 0 1px #c9c2b5;
+  font: 600 12px/1.4 ui-monospace, Consolas, monospace; color: #555;
+  opacity: 0; pointer-events: none; transition: opacity .12s;
+}
+.goal:hover .goal-code, .goal:focus-within .goal-code, .goal.editing .goal-code { opacity: 1; }
+.goal-edit {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 0 2px;
+  border: 0; border-bottom: 2.5px dashed var(--ink-blue); border-radius: 0;
+  background: #fffbe0; color: inherit; font: inherit;
+}
+.goal-edit:focus { outline: none; }
+/* Het eerstvolgende lege vak: "+ Doel toevoegen" */
+.goal-add .goal-box { border-style: dashed; opacity: .45; }
+.goal-add-btn {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: rgba(38,38,38,.45); text-align: left;
+}
+.goal-add-btn:hover { color: var(--ink-blue); }
+.goal-add-btn:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 2px; border-radius: 3px; }
+.goal-add-btn:disabled { cursor: default; color: rgba(38,38,38,.25); }
 
 /* Alleen voor schermlezers */
 .sr-only {

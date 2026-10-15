@@ -5,7 +5,7 @@
 // Een step is een lijst van items (keyword, tip, question) die bij één klik verschijnen.
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
-import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS } from './content.js';
+import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX } from './content.js';
 import { stepsToText, textToSteps, listToText, textToList } from './sheet-text.js';
 
 const STAGE_W = 1600;
@@ -65,6 +65,7 @@ let stickies = [];        // knop-elementen, index = onderwerp
 let stickyFontPx = 22;    // maximale lettergrootte op een geeltje, gezet door buildStickies()
 let scale = 1;
 let generation = 0;       // verhoogd bij elke navigatie; oude animatiestappen stoppen dan
+let loadedGoals = '[]';     // de doelen zoals geladen (JSON), om wijzigingen te herkennen
 let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafspraken), zolang het open is (zie openTextEditor)
 // Wijzigingen (alleen in het geheugen) gaan direct in het model: tips die tijdens de presentatie
 // worden toegevoegd (type tip, user: true), en in de bewerkmodus bewerken, toevoegen,
@@ -148,22 +149,9 @@ function start(raw) {
   // Werkafspraken (standaard verborgen; zonder afspraken ook geen knop)
   renderAgreements();
 
-  // Doelen bovenaan het whiteboard: per doel een vakje (met een nog onzichtbaar vinkje) en de
-  // tekst. Voor schermlezers staat de toestand er als tekst bij.
-  els.goals.replaceChildren(...deck.goals.map((goal) => {
-    const li = document.createElement('li');
-    li.className = 'goal';
-    li.dataset.goal = goal.id;
-    li.innerHTML = '<span class="goal-box" aria-hidden="true"><svg class="goal-check" viewBox="0 0 40 40"><path d="M7 22 L16 31 L35 6"/></svg></span>';
-    const text = document.createElement('span');
-    text.className = 'goal-text';
-    text.textContent = goal.text;
-    const state = document.createElement('span');
-    state.className = 'sr-only';
-    li.append(text, state);
-    return li;
-  }));
-  els.goals.hidden = deck.goals.length === 0;
+  // Doelen bovenaan het whiteboard (zie buildGoals)
+  loadedGoals = JSON.stringify(deck.goals);
+  buildGoals();
 
   els.login.hidden = true;
   els.viewport.hidden = false;
@@ -181,6 +169,7 @@ function start(raw) {
 /** Past alle tekstgroottes opnieuw aan de beschikbare ruimte aan. */
 function refitText() {
   if (els.stage.hidden) return; // er valt niets te meten; showStage() past alles opnieuw
+  fitGoals(); // eerst: de hoogte van de strook bepaalt de ruimte voor de geeltjes
   applyStickySize();
   fitStickyText(stickyFontPx);
   fitList(els.tipsSheet, els.tipsList, LIST_FONT_MAX, 18);
@@ -472,6 +461,84 @@ function updateButtons() {
   els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos) || editing;
   els.agreementsEditBtn.disabled = !isContent(pos) || editing;
+  const addGoalBtn = els.goals.querySelector('.goal-add-btn');
+  if (addGoalBtn) addGoalBtn.disabled = !isContent(pos) || editing;
+}
+
+/**
+ * Bouwt de doelenstrook: per doel een vakje (met een nog onzichtbaar vinkje) en de tekst. Voor
+ * schermlezers staat de toestand er als tekst bij. In de bewerkmodus krijgt elk doel ook zijn
+ * code (+doel1, zichtbaar bij aanwijzen, focus en bewerken) en, als er minder dan GOALS_MAX
+ * doelen zijn, het eerstvolgende vak een knop "+ Doel toevoegen". Daarna de vinkjes opnieuw.
+ * Na een wijziging in de bewerkmodus ook refitText(): de strook kan hoger of lager zijn.
+ */
+function buildGoals() {
+  const items = deck.goals.map((goal) => {
+    const li = document.createElement('li');
+    li.className = 'goal';
+    li.dataset.goal = goal.id;
+    li.innerHTML = '<span class="goal-box" aria-hidden="true"><svg class="goal-check" viewBox="0 0 40 40"><path d="M7 22 L16 31 L35 6"/></svg></span>';
+    const text = document.createElement('span');
+    text.className = 'goal-text';
+    text.textContent = goal.text;
+    const state = document.createElement('span');
+    state.className = 'sr-only';
+    li.append(text, state);
+    if (editMode) {
+      li.append(goalCode(goal.id));
+      text.tabIndex = 0;
+      text.setAttribute('role', 'button');
+      text.setAttribute('aria-describedby', 'goal-code-' + goal.id);
+      text.title = 'Doel bewerken (klik of Enter)';
+    }
+    return li;
+  });
+  if (editMode && deck.goals.length < GOALS_MAX) {
+    const id = GOAL_IDS[deck.goals.length];
+    const li = document.createElement('li');
+    li.className = 'goal goal-add';
+    li.dataset.slot = id;
+    li.innerHTML = '<span class="goal-box" aria-hidden="true"></span>';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'goal-add-btn';
+    button.textContent = '+ Doel toevoegen';
+    button.title = 'Doel toevoegen (D)';
+    button.setAttribute('aria-keyshortcuts', 'D');
+    button.setAttribute('aria-describedby', 'goal-code-' + id);
+    li.append(button, goalCode(id));
+    items.push(li);
+  }
+  els.goals.replaceChildren(...items);
+  els.goals.hidden = items.length === 0;
+  if (isContent(pos)) renderGoals(checkedGoalsAt(pos), [], 0);
+}
+
+/** De code van een doel (+doel1) zoals je hem in een vel typt; alleen in de bewerkmodus. */
+function goalCode(id) {
+  const code = document.createElement('span');
+  code.className = 'goal-code';
+  code.id = 'goal-code-' + id;
+  code.textContent = '+' + id;
+  return code;
+}
+
+// De doelenstrook mag niet te hoog worden, anders schuift het kanbanbord weg: hooguit drie regels
+// per rij bij de gewone lettergrootte. Daarboven krimpen de letters, tot GOALS_FONT_MIN.
+const GOALS_FONT = 27;      // px
+const GOALS_FONT_MIN = 22;  // px: op een laptop van 1920×1080 nog goed leesbaar
+const GOALS_MAX_HEIGHT = 2 * 3 * Math.ceil(GOALS_FONT * 1.15) + 6 + 2; // twee rijen van drie regels, gap en padding
+
+/** Verkleint de letters van de doelen tot de strook niet hoger is dan GOALS_MAX_HEIGHT. */
+function fitGoals() {
+  const ul = els.goals;
+  if (ul.hidden || els.stage.hidden) return;
+  let size = GOALS_FONT;
+  ul.style.setProperty('--goal-font', size + 'px');
+  while (ul.offsetHeight > GOALS_MAX_HEIGHT && size > GOALS_FONT_MIN) {
+    size -= 1;
+    ul.style.setProperty('--goal-font', size + 'px');
+  }
 }
 
 /**
@@ -480,6 +547,7 @@ function updateButtons() {
  */
 function renderGoals(checked, drawIds, delay) {
   for (const li of els.goals.children) {
+    if (!li.dataset.goal) continue; // het vak "+ Doel toevoegen" (bewerkmodus)
     const on = checked.has(li.dataset.goal);
     li.classList.toggle('checked', on);
     li.querySelector('.sr-only').textContent = on ? ' (afgevinkt)' : ' (nog niet afgevinkt)';
@@ -895,7 +963,7 @@ function openSheetEditor() {
     help: [
       `${code('*')} ${code('-')} ${code('1.')} steekwoord, 2/4 spaties inspringen`,
       `lege regel ruimte, ${code('---')} lijn, ${code('-&gt;')} klik`,
-      `${code('?')} vraag, ${code('!')} tip, ${code('+id')} doel afvinken`,
+      `${code('?')} vraag, ${code('!')} tip, ${code('+' + GOAL_IDS[0])} t/m ${code('+' + GOAL_IDS.at(-1))} doel afvinken`,
       `${code('[kleur]')} ${[...KEYWORD_COLORS].join(' ')}`,
     ],
     onSave: saveSheet,
@@ -998,6 +1066,119 @@ function editTitle() {
   input.select();
 }
 
+/* ---------- Doelen bewerken (?edit) ---------- */
+// Klik op de tekst van een doel (of Tab ernaartoe en Enter): die wordt een invoerveld. Enter of
+// wegklikken slaat op, Esc annuleert. Leeg opslaan verwijdert het doel; wordt het ergens
+// afgevinkt, dan eerst een bevestiging, en die afvinkmomenten verdwijnen mee. De doelen erna
+// schuiven een vak op (doel4 wordt doel3, ook in de vellen). Toevoegen kan alleen op het
+// eerstvolgende lege vak: de knop "+ Doel toevoegen" of D.
+
+function editGoal(li) {
+  if (!editMode || textEditor || !isContent(pos) || els.goals.querySelector('.goal-edit')) return;
+  finishAllAnimations();
+  const goal = deck.goals.find((g) => g.id === li.dataset.goal) ?? null; // null: nieuw doel
+  const id = goal ? goal.id : li.dataset.slot;
+  const target = li.querySelector(goal ? '.goal-text' : '.goal-add-btn');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'goal-edit';
+  input.maxLength = GOAL_TEXT_MAX;
+  input.value = goal ? goal.text : '';
+  input.setAttribute('aria-label', goal ? 'Tekst van het doel' : 'Nieuw doel');
+  input.setAttribute('aria-describedby', 'goal-code-' + id);
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const value = input.value.replace(/\s+/g, ' ').trim();
+    const refocus = document.activeElement === input;
+    input.remove();
+    target.hidden = false;
+    li.classList.remove('editing');
+    let focusId = id;
+    if (save && goal && !value) {
+      if (deleteGoal(goal)) focusId = GOAL_IDS[Math.min(deck.goals.length, GOAL_IDS.indexOf(id))];
+    } else if (save && goal && value !== goal.text) {
+      goal.text = value;
+      goalsUpdated();
+    } else if (save && !goal && value) {
+      deck.goals.push({ id: GOAL_IDS[deck.goals.length], text: value });
+      goalsUpdated();
+    }
+    if (refocus) focusGoal(focusId);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') finish(true);
+    else if (e.key === 'Escape') finish(false);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  input.addEventListener('blur', () => finish(true));
+  li.classList.add('editing');
+  target.hidden = true;
+  target.after(input);
+  input.focus({ preventScroll: true });
+  input.select();
+}
+
+/** Toevoegen op het eerstvolgende lege vak (de knop "+ Doel toevoegen" of D). */
+function addGoal() {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  const slot = els.goals.querySelector('.goal-add');
+  if (!slot) return showNotice(`Er zijn al ${GOALS_MAX} doelen; meer passen er niet.`);
+  editGoal(slot);
+}
+
+/** Focus op de tekst van een doel, of op de knop "+ Doel toevoegen" als dat vak leeg is. */
+function focusGoal(id) {
+  const el = els.goals.querySelector(`[data-goal="${id}"] .goal-text`) ?? els.goals.querySelector('.goal-add-btn');
+  el?.focus({ preventScroll: true });
+}
+
+/**
+ * Verwijdert een doel. Wordt het afgevinkt, dan eerst bevestigen; die afvinkmomenten verdwijnen
+ * mee (en een klik die daardoor leeg is ook). De doelen erna schuiven een vak op, ook in de
+ * vellen. Geeft false als het verwijderen is afgebroken.
+ */
+function deleteGoal(goal) {
+  const usedOn = flat.filter((f) => f.steps.some((step) => step.some((it) => it.type === 'check' && it.goal === goal.id)));
+  if (usedOn.length && !confirm(
+    `Doel ${goal.id} wordt afgevinkt op ${usedOn.map((f) => `„${f.title}”`).join(', ')}.\n\n`
+    + 'Toch verwijderen? Die afvinkmomenten verdwijnen dan ook.')) return false;
+  const n = deck.goals.indexOf(goal);
+  deck.goals.splice(n, 1);
+  const renamed = new Map(deck.goals.slice(n).map((g, k) => [g.id, GOAL_IDS[n + k]]));
+  deck.goals.forEach((g, k) => { g.id = GOAL_IDS[k]; });
+  flat.forEach((f, i) => {
+    let touched = false;
+    for (let s = f.steps.length - 1; s >= 0; s--) {
+      const step = f.steps[s];
+      for (let k = step.length - 1; k >= 0; k--) {
+        const it = step[k];
+        if (it.type !== 'check') continue;
+        if (it.goal === goal.id) { step.splice(k, 1); touched = true; }
+        else if (renamed.has(it.goal)) { it.goal = renamed.get(it.goal); touched = true; }
+      }
+      if (step.length === 0) {
+        f.steps.splice(s, 1);
+        if (i === pos.sheet && s < pos.step) pos = { sheet: i, step: pos.step - 1 };
+      }
+    }
+    if (touched) dirtySheets.add(i);
+  });
+  goalsUpdated();
+  render(null); // de vinkjes (en een vel waaruit een klik verdween) opnieuw
+  return true;
+}
+
+/** Na elke wijziging aan de doelen: de strook opnieuw opbouwen en alles opnieuw passen. */
+function goalsUpdated() {
+  buildGoals();
+  refitText();
+  updateButtons();
+}
+
 /** Korte melding boven de bedieningsbalk (ook voorgelezen); verdwijnt na een paar seconden. */
 let noticeTimer;
 function showNotice(text) {
@@ -1028,6 +1209,19 @@ if (editMode) {
     e.preventDefault();
     e.stopPropagation();
     editTitle();
+  });
+  // Doelen: klik of Enter op de tekst bewerkt; de knop "+ Doel toevoegen" (of D) voegt toe.
+  els.goals.addEventListener('click', (e) => {
+    if (e.target.closest('.goal-edit')) return;
+    if (e.target.closest('.goal-add-btn')) return addGoal();
+    const li = e.target.closest('.goal-text') && e.target.closest('.goal');
+    if (li) editGoal(li);
+  });
+  els.goals.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.classList.contains('goal-text')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    editGoal(e.target.closest('.goal'));
   });
   els.tipsList.addEventListener('click', (e) => {
     const li = e.target.closest('li');
@@ -1432,6 +1626,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === '+' && isContent(pos) && !editMode) { e.preventDefault(); openTipForm(); }
   else if ((e.key === 'e' || e.key === 'E') && editMode && isContent(pos)) { e.preventDefault(); openSheetEditor(); }
   else if ((e.key === 'a' || e.key === 'A') && editMode && !els.agreementsBox.hidden) { e.preventDefault(); openAgreementsEditor(); }
+  else if ((e.key === 'd' || e.key === 'D') && editMode && isContent(pos)) { e.preventDefault(); addGoal(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -1541,10 +1736,14 @@ function updateDownload() {
   const titles = flat.filter((f) => f.title !== rawContent.topics?.[f.topic]?.sheets?.[f.sheet]?.title).length;
   if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
   if (agreementsChanged()) parts.push('de werkafspraken gewijzigd');
+  if (goalsChanged()) parts.push('de doelen gewijzigd');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
   els.endNote.textContent = `Je hebt ${list}. `
     + 'Dit bestand is onversleuteld: zet het in de projectmap, versleutel het opnieuw en verwijder de download.';
 }
+
+/** Zijn de doelen anders dan bij het laden? */
+const goalsChanged = () => JSON.stringify(deck.goals) !== loadedGoals;
 
 /** Zijn de werkafspraken anders dan in de geladen inhoud? */
 function agreementsChanged() {
@@ -1571,6 +1770,7 @@ function contentWithChanges() {
     sheet.steps = f.steps.map((step) => step.map((item) => structuredClone(item)));
   }
   if (agreementsChanged()) copy.agreements = [...deck.agreements];
+  if (goalsChanged()) copy.goals = deck.goals.map((g) => ({ id: g.id, text: g.text }));
   return copy;
 }
 
