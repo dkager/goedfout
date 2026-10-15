@@ -34,6 +34,8 @@ const els = {
   agreementsBox: $('#agreements'),
   agreementsBtn: $('#btn-agreements'),
   agreementsEditBtn: $('#btn-agreements-edit'),
+  addSheetBtn: $('#btn-sheet-add'),
+  deleteSheetBtn: $('#btn-sheet-delete'),
   kanban: $('.kanban'),
   cols: { todo: $('#col-todo'), doing: $('#col-doing'), done: $('#col-done') },
   addTip: $('#add-tip'),
@@ -68,11 +70,10 @@ let generation = 0;       // verhoogd bij elke navigatie; oude animatiestappen s
 let loadedGoals = '[]';     // de doelen zoals geladen (JSON), om wijzigingen te herkennen
 let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafspraken), zolang het open is (zie openTextEditor)
 // Wijzigingen (alleen in het geheugen) gaan direct in het model: tips die tijdens de presentatie
-// worden toegevoegd (type tip, user: true), en in de bewerkmodus bewerken, toevoegen,
-// verwijderen en klikken splitsen of samenvoegen. Voor de export en de telling op het
-// afsluitscherm houden we bij:
-const original = new Map();     // item uit de inhoud → JSON zoals geladen (om bewerkingen te tellen)
-const dirtySheets = new Set();  // indexen in flat van vellen die gewijzigd zijn
+// worden toegevoegd (type tip, user: true), en alles uit de bewerkmodus. De export schrijft de
+// vellen altijd uit het model (zie contentWithChanges). Voor de telling op het afsluitscherm:
+const original = new Map();        // item uit de inhoud → JSON zoals geladen (om bewerkingen te tellen)
+const originalSheets = new Map();  // vel uit de inhoud → titel zoals geladen (toegevoegd, verwijderd, hernoemd)
 const editMode = new URLSearchParams(location.search).has('edit');
 
 /* ------------------------------------------------------------------ */
@@ -138,12 +139,8 @@ function start(raw) {
   subtitle.textContent = typeof raw.title === 'string' ? raw.title.trim() : '';
   subtitle.hidden = subtitle.textContent === '';
 
-  flat = [];
-  firstSheetOfTopic = [];
-  deck.topics.forEach((topic, t) => {
-    firstSheetOfTopic[t] = flat.length;
-    topic.sheets.forEach((sheet, s) => flat.push({ topic: t, sheet: s, title: sheet.title, steps: sheet.steps }));
-  });
+  rebuildFlat();
+  for (const topic of deck.topics) for (const sheet of topic.sheets) originalSheets.set(sheet, sheet.title);
   for (const f of flat) for (const step of f.steps) for (const item of step) original.set(item, JSON.stringify(item));
 
   // Werkafspraken (standaard verborgen; zonder afspraken ook geen knop)
@@ -164,6 +161,19 @@ function start(raw) {
   // Opnieuw passen zodra de handschriftlettertypen geladen zijn (die hebben andere maten
   // dan het vervangende lettertype, waardoor lijsten anders te klein uitvallen).
   document.fonts?.ready.then(refitText);
+}
+
+/**
+ * Bouwt de platte lijst van vellen (flat) opnieuw op uit het model: bij het laden, en na het
+ * toevoegen of verwijderen van een vel. De steps zijn dezelfde lijsten als in het model.
+ */
+function rebuildFlat() {
+  flat = [];
+  firstSheetOfTopic = [];
+  deck.topics.forEach((topic, t) => {
+    firstSheetOfTopic[t] = flat.length;
+    topic.sheets.forEach((sheet, s) => flat.push({ topic: t, sheet: s, title: sheet.title, steps: sheet.steps }));
+  });
 }
 
 /** Past alle tekstgroottes opnieuw aan de beschikbare ruimte aan. */
@@ -461,6 +471,10 @@ function updateButtons() {
   els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos) || editing;
   els.agreementsEditBtn.disabled = !isContent(pos) || editing;
+  els.addSheetBtn.disabled = !isContent(pos) || editing;
+  const onlySheet = isContent(pos) && deck.topics[flat[pos.sheet].topic].sheets.length === 1;
+  els.deleteSheetBtn.disabled = !isContent(pos) || editing || onlySheet;
+  els.deleteSheetBtn.title = onlySheet ? 'Het enige vel van dit onderwerp kan niet weg' : 'Dit vel verwijderen (V)';
   const addGoalBtn = els.goals.querySelector('.goal-add-btn');
   if (addGoalBtn) addGoalBtn.disabled = !isContent(pos) || editing;
 }
@@ -861,7 +875,6 @@ function submitTip() {
   const steps = flat[pos.sheet].steps;
   if (pos.step === 0) { steps.unshift([item]); pos = { sheet: pos.sheet, step: 1 }; }
   else steps[pos.step - 1].push(item);
-  dirtySheets.add(pos.sheet);
   finishAllAnimations();
   playBell();
   announceTips(['Tip toegevoegd: ' + text]);
@@ -1009,25 +1022,20 @@ function saveSheet(text) {
   }
   const steps = textToSteps(text, new Set(deck.goals.map((g) => g.id)))
     .map((step) => step.map((item) => pool.get(itemSignature(item))?.shift() ?? item));
-  const changed = steps.length !== f.steps.length
-    || steps.some((step, s) => step.length !== f.steps[s].length || step.some((item, k) => item !== f.steps[s][k]));
-  if (changed) {
-    f.steps.splice(0, f.steps.length, ...steps); // dezelfde lijst als in deck
-    dirtySheets.add(i);
-  }
+  f.steps.splice(0, f.steps.length, ...steps); // dezelfde lijst als in deck
   pos = { sheet: i, step: f.steps.length };
   render(null);
 }
 
 /**
  * De titel van het huidige vel bewerken, op zijn plek. Enter of wegklikken slaat op, Esc
- * annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren.
+ * annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren. Bij een nieuw vel
+ * (addSheet) volgt daarna onDone, of bij annuleren (Esc of leeg) onCancel.
  */
-function editTitle() {
+function editTitle({ onDone, onCancel } = {}) {
   if (!editMode || textEditor || !isContent(pos) || els.keywordTitle.hidden) return;
   finishAllAnimations();
-  const i = pos.sheet;
-  const f = flat[i];
+  const f = flat[pos.sheet];
   const heading = els.keywordTitle;
   const input = document.createElement('input');
   input.type = 'text';
@@ -1042,14 +1050,15 @@ function editTitle() {
     const refocus = document.activeElement === input;
     input.remove();
     heading.hidden = false;
+    if (onCancel && !(save && value)) return onCancel();
     if (save && value && value !== f.title) {
       f.title = value;
       deck.topics[f.topic].sheets[f.sheet].title = value;
-      dirtySheets.add(i);
       heading.textContent = titleAt(pos);
       fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20); // de titel kan langer of korter zijn
     }
     if (refocus) heading.focus({ preventScroll: true });
+    onDone?.();
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') finish(true);
@@ -1064,6 +1073,59 @@ function editTitle() {
   heading.after(input);
   input.focus({ preventScroll: true });
   input.select();
+}
+
+/* ---------- Vellen toevoegen en verwijderen (?edit) ---------- */
+// "Vel toevoegen" (of N): een nieuw, leeg vel "Nieuw vel" direct na het huidige, bij hetzelfde
+// onderwerp. De titel staat meteen open: Enter of wegklikken houdt het vel en opent daarna het
+// tekstvak van het vel; Esc of een lege titel maakt het toevoegen ongedaan. "Vel verwijderen"
+// (of V): het huidige vel weg, na een bevestiging als er iets op staat. Het enige vel van een
+// onderwerp kan niet weg. Na beide wordt de lijst met vellen opnieuw opgebouwd en alles getekend.
+
+const NEW_SHEET_TITLE = 'Nieuw vel';
+
+function addSheet() {
+  if (!editMode || textEditor || !isContent(pos) || els.keywordTitle.hidden) return;
+  const back = pos;
+  const f = flat[pos.sheet];
+  const sheets = deck.topics[f.topic].sheets;
+  const sheet = { title: NEW_SHEET_TITLE, steps: [] };
+  sheets.splice(f.sheet + 1, 0, sheet);
+  rebuildFlat();
+  pos = { sheet: back.sheet + 1, step: 0 };
+  render(null);
+  editTitle({
+    onDone: () => openSheetEditor(),
+    onCancel: () => {
+      sheets.splice(sheets.indexOf(sheet), 1);
+      rebuildFlat();
+      pos = back;
+      render(null);
+      els.addSheetBtn.focus({ preventScroll: true });
+    },
+  });
+}
+
+function deleteSheet() {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  const f = flat[pos.sheet];
+  const sheets = deck.topics[f.topic].sheets;
+  if (sheets.length === 1) return showNotice('Dit is het enige vel van dit onderwerp; dat kan niet weg.');
+  const items = f.steps.flat();
+  if (items.length) {
+    const count = (n, one, more) => `${n} ${n === 1 ? one : more}`;
+    const tips = items.filter((it) => it.type === 'tip').length;
+    const goals = [...new Set(items.filter((it) => it.type === 'check').map((it) => it.goal))];
+    const extra = [tips ? count(tips, 'tip', 'tips') : '', goals.length ? 'het afvinken van ' + goals.join(' en ') : ''].filter(Boolean);
+    const what = count(f.steps.length, 'klik', 'klikken') + (extra.length ? ', met ' + extra.join(' en ') : '');
+    if (!confirm(`Vel „${f.title}” verwijderen?\n\nOp dit vel staan ${what}. Die verdwijnen mee.`)) return;
+  }
+  const first = f.sheet === 0; // dan naar het volgende vel van dit onderwerp, anders het vorige
+  sheets.splice(f.sheet, 1);
+  rebuildFlat();
+  const target = first ? pos.sheet : pos.sheet - 1;
+  pos = { sheet: target, step: first ? 0 : flat[target].steps.length };
+  render(null);
 }
 
 /* ---------- Doelen bewerken (?edit) ---------- */
@@ -1151,21 +1213,19 @@ function deleteGoal(goal) {
   const renamed = new Map(deck.goals.slice(n).map((g, k) => [g.id, GOAL_IDS[n + k]]));
   deck.goals.forEach((g, k) => { g.id = GOAL_IDS[k]; });
   flat.forEach((f, i) => {
-    let touched = false;
     for (let s = f.steps.length - 1; s >= 0; s--) {
       const step = f.steps[s];
       for (let k = step.length - 1; k >= 0; k--) {
         const it = step[k];
         if (it.type !== 'check') continue;
-        if (it.goal === goal.id) { step.splice(k, 1); touched = true; }
-        else if (renamed.has(it.goal)) { it.goal = renamed.get(it.goal); touched = true; }
+        if (it.goal === goal.id) step.splice(k, 1);
+        else if (renamed.has(it.goal)) it.goal = renamed.get(it.goal);
       }
       if (step.length === 0) {
         f.steps.splice(s, 1);
         if (i === pos.sheet && s < pos.step) pos = { sheet: i, step: pos.step - 1 };
       }
     }
-    if (touched) dirtySheets.add(i);
   });
   goalsUpdated();
   render(null); // de vinkjes (en een vel waaruit een klik verdween) opnieuw
@@ -1196,6 +1256,10 @@ if (editMode) {
   $('#edit-badge').hidden = false;
   els.editBtn.hidden = false;
   els.editBtn.addEventListener('click', () => openSheetEditor());
+  els.addSheetBtn.hidden = false;
+  els.deleteSheetBtn.hidden = false;
+  els.addSheetBtn.addEventListener('click', () => addSheet());
+  els.deleteSheetBtn.addEventListener('click', () => deleteSheet());
   els.agreementsEditBtn.addEventListener('click', () => openAgreementsEditor());
   els.agreementsBox.addEventListener('click', () => openAgreementsEditor());
   els.keywordSheet.addEventListener('click', () => openSheetEditor());
@@ -1627,6 +1691,8 @@ document.addEventListener('keydown', (e) => {
   else if ((e.key === 'e' || e.key === 'E') && editMode && isContent(pos)) { e.preventDefault(); openSheetEditor(); }
   else if ((e.key === 'a' || e.key === 'A') && editMode && !els.agreementsBox.hidden) { e.preventDefault(); openAgreementsEditor(); }
   else if ((e.key === 'd' || e.key === 'D') && editMode && isContent(pos)) { e.preventDefault(); addGoal(); }
+  else if ((e.key === 'n' || e.key === 'N') && editMode && isContent(pos)) { e.preventDefault(); addSheet(); }
+  else if ((e.key === 'v' || e.key === 'V') && editMode && isContent(pos)) { e.preventDefault(); deleteSheet(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -1710,6 +1776,21 @@ function readHash() {
 // staat daar groot een downloadlink (onversleutelde JSON).
 
 let downloadUrl = null;
+let exportedJson = null; // de inhoud zoals voor het laatst gedownload (JSON); null = nog nooit
+
+// Waarschuwen bij sluiten of herladen zolang er wijzigingen zijn die nog niet via het
+// afsluitscherm zijn gedownload, of een tekstvak of invoerveld nog open staat. De browser toont
+// zijn eigen standaardvraag (een eigen tekst kan niet), en alleen als er op de pagina geklikt of
+// getypt is.
+window.addEventListener('beforeunload', (e) => {
+  if (!deck) return;
+  const open = textEditor !== null || document.querySelector('.title-edit, .goal-edit') !== null;
+  const current = JSON.stringify(contentWithChanges());
+  if (!open && current === (exportedJson ?? JSON.stringify(rawContent))) return;
+  e.preventDefault();
+  e.returnValue = ''; // voor oudere browsers
+});
+els.download.addEventListener('click', () => { exportedJson = JSON.stringify(contentWithChanges()); });
 
 function updateDownload() {
   const link = els.download;
@@ -1729,12 +1810,18 @@ function updateDownload() {
   const added = [...now].filter((it) => !original.has(it)).length;
   const edited = [...now].filter((it) => original.has(it) && JSON.stringify(it) !== original.get(it)).length;
   const removed = [...original.keys()].filter((it) => !now.has(it)).length;
+  const sheetsNow = deck.topics.flatMap((t) => t.sheets);
+  const sheetsAdded = sheetsNow.filter((sh) => !originalSheets.has(sh)).length;
+  const sheetsRemoved = [...originalSheets.keys()].filter((sh) => !sheetsNow.includes(sh)).length;
+  const titles = sheetsNow.filter((sh) => originalSheets.has(sh) && sh.title !== originalSheets.get(sh)).length;
+  const sheetsCount = (n, what) => (n === 1 ? '1 vel ' : n + ' vellen ') + what;
   const parts = [];
+  if (sheetsAdded) parts.push(sheetsCount(sheetsAdded, 'toegevoegd'));
+  if (sheetsRemoved) parts.push(sheetsCount(sheetsRemoved, 'verwijderd'));
+  if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
   if (added) parts.push(count(added, 'toegevoegd'));
   if (edited) parts.push(count(edited, 'bewerkt'));
   if (removed) parts.push(count(removed, 'verwijderd'));
-  const titles = flat.filter((f) => f.title !== rawContent.topics?.[f.topic]?.sheets?.[f.sheet]?.title).length;
-  if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
   if (agreementsChanged()) parts.push('de werkafspraken gewijzigd');
   if (goalsChanged()) parts.push('de doelen gewijzigd');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
@@ -1752,23 +1839,17 @@ function agreementsChanged() {
 }
 
 /**
- * De geladen inhoud met alle wijzigingen. Werkt op een kopie van de originele JSON: alleen de
- * steps van gewijzigde vellen worden vervangen door die uit het model, al het andere (ook
- * velden die de motor niet kent) blijft precies zoals het was. Ongeldige items en steps in een
- * gewijzigd vel, die de motor al oversloeg, vallen daarbij weg.
+ * De geladen inhoud met alle wijzigingen. Werkt op een kopie van de originele JSON; de vellen
+ * van elk onderwerp (titels, klikken, volgorde, ook toegevoegde en verwijderde) komen altijd uit
+ * het model. Zonder wijzigingen is dat precies wat er geladen is; ongeldige items, die de motor
+ * al oversloeg, vallen weg. Werkafspraken en doelen alleen als ze gewijzigd zijn.
  */
 function contentWithChanges() {
   const copy = structuredClone(rawContent);
-  for (const i of dirtySheets) {
-    const f = flat[i];
-    let topic = copy.topics[f.topic];
-    if (!topic || typeof topic !== 'object') topic = copy.topics[f.topic] = { sticky: deck.topics[f.topic].sticky, sheets: [] };
-    if (!Array.isArray(topic.sheets)) topic.sheets = [];
-    let sheet = topic.sheets[f.sheet];
-    if (!sheet || typeof sheet !== 'object' || Array.isArray(sheet)) sheet = topic.sheets[f.sheet] = { title: f.title };
-    sheet.title = f.title;
-    sheet.steps = f.steps.map((step) => step.map((item) => structuredClone(item)));
-  }
+  deck.topics.forEach((topic, t) => {
+    if (!copy.topics[t] || typeof copy.topics[t] !== 'object') copy.topics[t] = { sticky: topic.sticky };
+    copy.topics[t].sheets = topic.sheets.map((sheet) => ({ title: sheet.title, steps: structuredClone(sheet.steps) }));
+  });
   if (agreementsChanged()) copy.agreements = [...deck.agreements];
   if (goalsChanged()) copy.goals = deck.goals.map((g) => ({ id: g.id, text: g.text }));
   return copy;
