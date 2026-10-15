@@ -5,7 +5,7 @@
 // Een step is een lijst van items (keyword, tip, question) die bij één klik verschijnen.
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
-import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX } from './content.js';
+import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, TOPICS_MAX } from './content.js';
 import { stepsToText, textToSteps, listToText, textToList } from './sheet-text.js';
 
 const STAGE_W = 1600;
@@ -36,6 +36,9 @@ const els = {
   agreementsBtn: $('#btn-agreements'),
   agreementsEditBtn: $('#btn-agreements-edit'),
   addSheetBtn: $('#btn-sheet-add'),
+  topicTools: $('#topic-tools'),
+  addTopicBtn: $('#btn-topic-add'),
+  deleteTopicBtn: $('#btn-topic-delete'),
   deleteSheetBtn: $('#btn-sheet-delete'),
   kanban: $('.kanban'),
   cols: { todo: $('#col-todo'), doing: $('#col-doing'), done: $('#col-done') },
@@ -76,6 +79,7 @@ let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafsprake
 // vellen altijd uit het model (zie contentWithChanges). Voor de telling op het afsluitscherm:
 const original = new Map();        // item uit de inhoud → JSON zoals geladen (om bewerkingen te tellen)
 const originalSheets = new Map();  // vel uit de inhoud → titel zoals geladen (toegevoegd, verwijderd, hernoemd)
+const originalTopics = new Map();  // onderwerp uit de inhoud → { index in de JSON, naam zoals geladen }
 const editMode = new URLSearchParams(location.search).has('edit');
 
 /* ------------------------------------------------------------------ */
@@ -145,6 +149,7 @@ function start(raw) {
   loadedTitle = deck.title;
 
   rebuildFlat();
+  deck.topics.forEach((topic, t) => originalTopics.set(topic, { index: t, name: topic.sticky }));
   for (const topic of deck.topics) for (const sheet of topic.sheets) originalSheets.set(sheet, sheet.title);
   for (const f of flat) for (const step of f.steps) for (const item of step) original.set(item, JSON.stringify(item));
 
@@ -227,6 +232,7 @@ function applyStickySize() {
 }
 
 function buildStickies() {
+  for (const b of stickies) b.remove(); // opnieuw opbouwen (na toevoegen of verwijderen van een onderwerp)
   applyStickySize();
 
   const rotations = [-3, 2, -1.5, 3, -2.5, 1, 2.5, -1, 1.5, -2];
@@ -242,6 +248,8 @@ function buildStickies() {
     note.textContent = topic.sticky;
     b.append(note);
     b.addEventListener('click', () => {
+      // In de bewerkmodus is het geeltje in Doing (het huidige onderwerp) de plek om de naam te wijzigen.
+      if (editMode && isContent(pos) && flat[pos.sheet].topic === t) return editTopicName();
       b.blur(); // zodat spatie daarna "volgende" blijft
       goTo({ sheet: firstSheetOfTopic[t], step: 0 });
     });
@@ -472,11 +480,21 @@ function updateButtons() {
   b.textContent = label ? label + ' ›' : '›';
   b.title = isStart(pos) ? 'Presentatie starten (→)' : label ? 'Naar het afsluitscherm (→)' : 'Volgende (→)';
   els.prev.disabled = isStart(pos) || editing;
-  for (const sticky of stickies) sticky.disabled = editing;
+  const currentTopic = isContent(pos) ? flat[pos.sheet].topic : -1;
+  stickies.forEach((sticky, t) => {
+    sticky.disabled = editing;
+    sticky.title = editMode && t === currentTopic ? 'Naam van dit onderwerp wijzigen (klik of Enter)' : 'Ga naar: ' + deck.topics[t].sticky;
+  });
   els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos) || editing;
   els.agreementsEditBtn.disabled = !isContent(pos) || editing;
   els.addSheetBtn.disabled = !isContent(pos) || editing;
+  const full = deck.topics.length >= TOPICS_MAX;
+  els.addTopicBtn.disabled = !isContent(pos) || editing || full;
+  els.addTopicBtn.title = full ? `Er passen hooguit ${TOPICS_MAX} onderwerpen` : 'Nieuw onderwerp na dit onderwerp (G)';
+  const onlyTopic = deck.topics.length === 1;
+  els.deleteTopicBtn.disabled = !isContent(pos) || editing || onlyTopic;
+  els.deleteTopicBtn.title = onlyTopic ? 'Er moet altijd minstens één onderwerp zijn' : 'Dit onderwerp verwijderen (S)';
   const onlySheet = isContent(pos) && deck.topics[flat[pos.sheet].topic].sheets.length === 1;
   els.deleteSheetBtn.disabled = !isContent(pos) || editing || onlySheet;
   els.deleteSheetBtn.title = onlySheet ? 'Het enige vel van dit onderwerp kan niet weg' : 'Dit vel verwijderen (V)';
@@ -1146,21 +1164,106 @@ function deleteSheet() {
   const f = flat[pos.sheet];
   const sheets = deck.topics[f.topic].sheets;
   if (sheets.length === 1) return showNotice('Dit is het enige vel van dit onderwerp; dat kan niet weg.');
-  const items = f.steps.flat();
-  if (items.length) {
-    const count = (n, one, more) => `${n} ${n === 1 ? one : more}`;
-    const tips = items.filter((it) => it.type === 'tip').length;
-    const goals = [...new Set(items.filter((it) => it.type === 'check').map((it) => it.goal))];
-    const extra = [tips ? count(tips, 'tip', 'tips') : '', goals.length ? 'het afvinken van ' + goals.join(' en ') : ''].filter(Boolean);
-    const what = count(f.steps.length, 'klik', 'klikken') + (extra.length ? ', met ' + extra.join(' en ') : '');
-    if (!confirm(`Vel „${f.title}” verwijderen?\n\nOp dit vel staan ${what}. Die verdwijnen mee.`)) return;
-  }
+  if (f.steps.length && !confirm(`Vel „${f.title}” verwijderen?\n\nOp dit vel staan ${describeContent(f.steps)}. Die verdwijnen mee.`)) return;
   const first = f.sheet === 0; // dan naar het volgende vel van dit onderwerp, anders het vorige
   sheets.splice(f.sheet, 1);
   rebuildFlat();
   const target = first ? pos.sheet : pos.sheet - 1;
   pos = { sheet: target, step: first ? 0 : flat[target].steps.length };
   render(null);
+}
+
+/* ---------- Onderwerpen (geeltjes) bewerken (?edit) ---------- */
+// Alleen het huidige onderwerp, het geeltje in Doing: klik erop (of Tab en Enter) om de naam te
+// wijzigen. Onder dat geeltje: "+ Onderwerp" (G) voegt na het huidige onderwerp een onderwerp
+// toe met één leeg vel; de naam "Nieuw onderwerp" staat dan meteen open (Esc of leeg maakt het
+// toevoegen ongedaan) en daarna opent het tekstvak van het nieuwe vel. "Onderwerp verwijderen"
+// (S) verwijdert het huidige onderwerp, na een bevestiging als er iets op staat; er blijft altijd
+// minstens één onderwerp. Daarna worden de lijst met vellen en de geeltjes opnieuw opgebouwd.
+
+const NEW_TOPIC_NAME = 'Nieuw onderwerp';
+
+/** De naam van het huidige onderwerp bewerken, op het geeltje in Doing (zie editInPlace). */
+function editTopicName({ onDone, onCancel } = {}) {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  const t = flat[pos.sheet].topic;
+  const sticky = stickies[t];
+  if (sticky.hidden) return;
+  finishAllAnimations();
+  editInPlace(sticky, {
+    label: 'Naam van het onderwerp',
+    className: 'sticky-edit',
+    onDone,
+    onCancel,
+    onSave: (value) => {
+      deck.topics[t].sticky = value;
+      sticky.querySelector('.note').textContent = value;
+      fitStickyText(stickyFontPx);
+      updateButtons();
+    },
+  });
+}
+
+function addTopic() {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  if (deck.topics.length >= TOPICS_MAX) return showNotice(`Er zijn al ${TOPICS_MAX} onderwerpen; meer passen er niet leesbaar op het bord.`);
+  const back = pos;
+  const t = flat[pos.sheet].topic;
+  const topic = { sticky: NEW_TOPIC_NAME, sheets: [{ title: NEW_SHEET_TITLE, steps: [] }] };
+  deck.topics.splice(t + 1, 0, topic);
+  topicsUpdated();
+  pos = { sheet: firstSheetOfTopic[t + 1], step: 0 };
+  render(null);
+  editTopicName({
+    onDone: () => openSheetEditor(),
+    onCancel: () => {
+      deck.topics.splice(deck.topics.indexOf(topic), 1);
+      topicsUpdated();
+      pos = back;
+      render(null);
+      els.addTopicBtn.focus({ preventScroll: true });
+    },
+  });
+}
+
+function deleteTopic() {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  if (deck.topics.length === 1) return showNotice('Dit is het enige onderwerp; er moet er altijd minstens één zijn.');
+  const t = flat[pos.sheet].topic;
+  const topic = deck.topics[t];
+  const steps = topic.sheets.flatMap((sheet) => sheet.steps);
+  if (steps.length && !confirm(`Onderwerp „${topic.sticky}” verwijderen?\n\nHierin staan ${describeContent(steps, topic.sheets.length)}. Die verdwijnen mee.`)) return;
+  deck.topics.splice(t, 1);
+  topicsUpdated();
+  // Naar het laatste vel van het vorige onderwerp (helemaal ingevuld), of bij het eerste
+  // onderwerp naar het begin van het volgende. Dat onderwerp komt in Doing.
+  if (t === 0) pos = { sheet: 0, step: 0 };
+  else {
+    const last = (t < deck.topics.length ? firstSheetOfTopic[t] : flat.length) - 1;
+    pos = { sheet: last, step: flat[last].steps.length };
+  }
+  render(null);
+}
+
+/** Na toevoegen of verwijderen van een onderwerp: de vellen en de geeltjes opnieuw opbouwen. */
+function topicsUpdated() {
+  rebuildFlat();
+  buildStickies(); // nieuwe geeltjes in To do; render() zet ze op hun plek
+  fitStickyText(stickyFontPx);
+}
+
+/**
+ * Wat er op een vel of onderwerp staat, voor een bevestigingsvraag: "2 klikken, met 1 tip" of
+ * (met sheetCount) "3 vellen, 18 klikken, met 3 tips en het afvinken van doel1".
+ */
+function describeContent(steps, sheetCount = 0) {
+  const count = (n, one, more) => `${n} ${n === 1 ? one : more}`;
+  const items = steps.flat();
+  const tips = items.filter((it) => it.type === 'tip').length;
+  const goals = [...new Set(items.filter((it) => it.type === 'check').map((it) => it.goal))];
+  const extra = [tips ? count(tips, 'tip', 'tips') : '', goals.length ? 'het afvinken van ' + goals.join(' en ') : ''].filter(Boolean);
+  const head = (sheetCount ? count(sheetCount, 'vel', 'vellen') + ', ' : '') + count(steps.length, 'klik', 'klikken');
+  return head + (extra.length ? ', met ' + extra.join(' en ') : '');
 }
 
 /* ---------- Doelen bewerken (?edit) ---------- */
@@ -1292,6 +1395,9 @@ if (editMode) {
   els.editBtn.hidden = false;
   els.editBtn.addEventListener('click', () => openSheetEditor());
   els.addSheetBtn.hidden = false;
+  els.topicTools.hidden = false;
+  els.addTopicBtn.addEventListener('click', () => addTopic());
+  els.deleteTopicBtn.addEventListener('click', () => deleteTopic());
   els.deleteSheetBtn.hidden = false;
   els.addSheetBtn.addEventListener('click', () => addSheet());
   els.deleteSheetBtn.addEventListener('click', () => deleteSheet());
@@ -1739,6 +1845,8 @@ document.addEventListener('keydown', (e) => {
   else if ((e.key === 'd' || e.key === 'D') && editMode && isContent(pos)) { e.preventDefault(); addGoal(); }
   else if ((e.key === 'n' || e.key === 'N') && editMode && isContent(pos)) { e.preventDefault(); addSheet(); }
   else if ((e.key === 'v' || e.key === 'V') && editMode && isContent(pos)) { e.preventDefault(); deleteSheet(); }
+  else if ((e.key === 'g' || e.key === 'G') && editMode && isContent(pos)) { e.preventDefault(); addTopic(); }
+  else if ((e.key === 's' || e.key === 'S') && editMode && isContent(pos)) { e.preventDefault(); deleteTopic(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -1861,7 +1969,14 @@ function updateDownload() {
   const sheetsRemoved = [...originalSheets.keys()].filter((sh) => !sheetsNow.includes(sh)).length;
   const titles = sheetsNow.filter((sh) => originalSheets.has(sh) && sh.title !== originalSheets.get(sh)).length;
   const sheetsCount = (n, what) => (n === 1 ? '1 vel ' : n + ' vellen ') + what;
+  const topicsAdded = deck.topics.filter((t) => !originalTopics.has(t)).length;
+  const topicsRemoved = [...originalTopics.keys()].filter((t) => !deck.topics.includes(t)).length;
+  const topicsRenamed = deck.topics.filter((t) => originalTopics.has(t) && t.sticky !== originalTopics.get(t).name).length;
+  const topicsCount = (n, what) => (n === 1 ? '1 onderwerp ' : n + ' onderwerpen ') + what;
   const parts = [];
+  if (topicsAdded) parts.push(topicsCount(topicsAdded, 'toegevoegd'));
+  if (topicsRemoved) parts.push(topicsCount(topicsRemoved, 'verwijderd'));
+  if (topicsRenamed) parts.push(topicsRenamed === 1 ? '1 onderwerpnaam gewijzigd' : topicsRenamed + ' onderwerpnamen gewijzigd');
   if (sheetsAdded) parts.push(sheetsCount(sheetsAdded, 'toegevoegd'));
   if (sheetsRemoved) parts.push(sheetsCount(sheetsRemoved, 'verwijderd'));
   if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
@@ -1886,16 +2001,17 @@ function agreementsChanged() {
 }
 
 /**
- * De geladen inhoud met alle wijzigingen. Werkt op een kopie van de originele JSON; de vellen
- * van elk onderwerp (titels, klikken, volgorde, ook toegevoegde en verwijderde) komen altijd uit
- * het model. Zonder wijzigingen is dat precies wat er geladen is; ongeldige items, die de motor
+ * De geladen inhoud met alle wijzigingen. Werkt op een kopie van de originele JSON; de
+ * onderwerpen en hun vellen (namen, titels, klikken, volgorde, ook toegevoegde en verwijderde)
+ * komen altijd uit het model. Zonder wijzigingen is dat precies wat er geladen is; ongeldige items, die de motor
  * al oversloeg, vallen weg. Werkafspraken en doelen alleen als ze gewijzigd zijn.
  */
 function contentWithChanges() {
   const copy = structuredClone(rawContent);
-  deck.topics.forEach((topic, t) => {
-    if (!copy.topics[t] || typeof copy.topics[t] !== 'object') copy.topics[t] = { sticky: topic.sticky };
-    copy.topics[t].sheets = topic.sheets.map((sheet) => ({ title: sheet.title, steps: structuredClone(sheet.steps) }));
+  copy.topics = deck.topics.map((topic) => {
+    const loaded = originalTopics.has(topic) ? copy.topics[originalTopics.get(topic).index] : null;
+    const base = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
+    return { ...base, sticky: topic.sticky, sheets: topic.sheets.map((sheet) => ({ title: sheet.title, steps: structuredClone(sheet.steps) })) };
   });
   if (agreementsChanged()) copy.agreements = [...deck.agreements];
   if (goalsChanged()) copy.goals = deck.goals.map((g) => ({ id: g.id, text: g.text }));

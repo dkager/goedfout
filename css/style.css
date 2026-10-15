@@ -706,3 +706,30 @@ body {
   /* Opsommingstekens zijn achtergrondkleuren: zonder dit laat de browser ze weg. */
   .print-root { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Onderwerpen bewerken (?edit) ---------- */
+/* Onder het geeltje in Doing: onderwerp toevoegen en verwijderen, in vaag handschrift */
+.kb-edit {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 0 10px;
+}
+.kb-edit[hidden] { display: none; }
+.kb-edit button {
+  padding: 0 6px; border: 0; border-radius: 3px; background: none; cursor: pointer;
+  font: 700 20px/1.2 var(--hand); color: rgba(38,38,38,.5);
+}
+.kb-edit button:hover { color: var(--ink-blue); }
+.kb-edit button:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 1px; }
+.kb-edit button:disabled { cursor: default; color: rgba(38,38,38,.22); }
+/* Het geeltje in Doing is in de bewerkmodus de plek om de naam te wijzigen */
+.edit-mode #col-doing .sticky:not(:disabled) { cursor: text; }
+/* De naam bewerken: een invoerveld in de vorm van het geeltje (zie editInPlace) */
+.sticky-edit {
+  width: var(--sw); height: var(--sh); margin: 0; padding: 4px 6px;
+  border: 0; border-bottom: 2.5px dashed var(--ink-blue); border-radius: 0;
+  background: #fff6a8; color: #2b2a26;
+  box-shadow: 1px 3px 4px rgba(0,0,0,.18);
+  font: 700 var(--sfont)/1 var(--hand); text-align: center;
+}
+.sticky-edit:focus { outline: none; }

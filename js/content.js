@@ -27,6 +27,14 @@ export const GOALS_MAX = GOAL_IDS.length;
  */
 export const GOAL_TEXT_MAX = 100;
 
+/**
+ * Maximaal aantal onderwerpen (geeltjes). Gemeten op 1920×1080: tot 6 onderwerpen passen er 2
+ * geeltjes naast elkaar en zijn de letters 20–22px (op het scherm zo’n 24–26px); vanaf 7 worden
+ * het er 3 per rij en de letters 12px of kleiner (zie stickySize in app.js). Meer is een probleem
+ * (een waarschuwing), geen fout.
+ */
+export const TOPICS_MAX = 6;
+
 /** Markerkleuren voor een keyword (`"color": ...`). Zonder kleur: blauw. Zie --marker-* in style.css. */
 export const KEYWORD_COLORS = new Set(['blue', 'red', 'black', 'green', 'yellow', 'orange', 'purple', 'pink']);
 
@@ -78,6 +86,7 @@ export function normalizeContent(raw) {
   });
   const goalIds = new Set(goals.map((g) => g.id));
 
+  if (raw.topics.length > TOPICS_MAX) problems.push(`Er zijn ${raw.topics.length} onderwerpen; boven de ${TOPICS_MAX} worden de geeltjes slecht leesbaar.`);
   const topics = raw.topics.map((t, ti) => {
     const where = `Onderwerp ${ti + 1}`;
     if (!t || typeof t !== 'object') {
