@@ -19,6 +19,8 @@
       <input id="password" type="password" placeholder="Wachtwoord" autofocus required>
       <button type="submit">Openen</button>
       <p id="login-error" class="login-error" role="alert"></p>
+      <!-- Niet in de bewerkmodus (zie app.js) -->
+      <a id="demo-link" class="login-demo" href="?demo">Demo bekijken</a>
     </form>
   </div>
 
@@ -135,6 +137,8 @@
       <button id="btn-full" aria-label="Volledig scherm" aria-keyshortcuts="F" title="Volledig scherm (F)">⛶</button>
       <!-- Alleen met ?edit in de adresbalk -->
       <span id="edit-badge" class="edit-badge" hidden>✎ Bewerken</span>
+      <!-- Alleen met ?demo in de adresbalk -->
+      <span id="demo-badge" class="edit-badge" hidden>Demo</span>
       <button id="btn-edit" class="labeled" hidden
               title="Dit vel bewerken als tekst">Vel bewerken</button>
       <button id="btn-sheet-add" class="labeled" hidden

@@ -31,6 +31,7 @@ node tools/encrypt.js
 npx serve .                # of: npm run serve
 #    → http://localhost:3000
 #    → http://localhost:3000/?plain  laadt content.json zonder wachtwoord (alleen op localhost)
+#    → http://localhost:3000/?demo   de demo: content.example.json, zonder wachtwoord
 
 # 4. Publiceren: commit en push alleen de versleutelde versie
 git add content.enc.json && git commit -m "Inhoud bijgewerkt" && git push
@@ -39,6 +40,8 @@ git add content.enc.json && git commit -m "Inhoud bijgewerkt" && git push
 Controleren wat er in een versleuteld bestand staat: `node tools/encrypt.js --decrypt content.enc.json`.
 
 In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=... node tools/encrypt.js`.
+
+**Demo (`?demo`):** de link **Demo bekijken** op het loginscherm opent `?demo`: de voorbeeldinhoud uit `content.example.json`, zonder wachtwoord. Die staat al onversleuteld in de repository, dus de demo maakt niets openbaar wat dat nog niet was; hij laadt nooit een ander bestand. De demo is altijd de gewone live-modus, met in de bedieningsbalk een geel label "Demo": met `?demo` in de adresbalk tellen `?edit` en `?plain` niet, en in de bewerkmodus staat de link niet op het loginscherm. Tips toevoegen, de PDF en de download van de gewijzigde inhoud werken zoals altijd.
 
 **Wachtwoord:** versleutel de inhoud met een lang, geheim wachtwoord (16+ tekens). Zet het wachtwoord nergens in de repository (niet in de README, code, commitberichten of scripts), maar deel het buiten Git om.
 
@@ -293,7 +296,7 @@ De bedieningsbalk blijft op het afsluitscherm altijd zichtbaar, rechtsonder, nu 
 
 ### Het wachtwoordscherm
 
-Voordat de presentatie opent, zie je een donker scherm, net als het start- en afsluitscherm: bijna zwart met in het midden een iets lichtere gloed. Midden op het scherm staat een donkere kaart met afgeronde hoeken en een dun lichtgrijs randje. Daarop staat de titel "PRESENTATIE" in grote, vette, bijna witte hoofdletters met ruime letterafstand, de zin "Voer het wachtwoord in om de presentatie te openen." in grijs, een donker invoerveld voor het wachtwoord en een felgroene knop "Openen" met donkere tekst. Bij een fout wachtwoord verschijnt daaronder in zachtrood "Onjuist wachtwoord." Na het juiste wachtwoord volgt het startscherm.
+Voordat de presentatie opent, zie je een donker scherm, net als het start- en afsluitscherm: bijna zwart met in het midden een iets lichtere gloed. Midden op het scherm staat een donkere kaart met afgeronde hoeken en een dun lichtgrijs randje. Daarop staat de titel "PRESENTATIE" in grote, vette, bijna witte hoofdletters met ruime letterafstand, de zin "Voer het wachtwoord in om de presentatie te openen." in grijs, een donker invoerveld voor het wachtwoord en een felgroene knop "Openen" met donkere tekst. Bij een fout wachtwoord verschijnt daaronder in zachtrood "Onjuist wachtwoord." Onderaan de kaart staat de link "Demo bekijken", vormgegeven als een rustigere knop: alleen een felgroene rand met bijna witte tekst (niet in de bewerkmodus). Na het juiste wachtwoord volgt het startscherm.
 
 ### Wat een schermlezer meekrijgt
 

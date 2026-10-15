@@ -18,6 +18,7 @@ const $ = (sel) => document.querySelector(sel);
 const els = {
   login: $('#login'),
   form: $('#login-form'),
+  demoLink: $('#demo-link'),
   password: $('#password'),
   loginError: $('#login-error'),
   viewport: $('#viewport'),
@@ -84,7 +85,10 @@ let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafsprake
 const original = new Map();        // item uit de inhoud → JSON zoals geladen (om bewerkingen te tellen)
 const originalSheets = new Map();  // vel uit de inhoud → { title, order, topic } zoals geladen (toegevoegd, verwijderd, hernoemd, verplaatst)
 const originalTopics = new Map();  // onderwerp uit de inhoud → { index in de JSON, naam zoals geladen }
-const editMode = new URLSearchParams(location.search).has('edit');
+// ?demo: de voorbeeldinhoud (content.example.json, staat onversleuteld in de repository), zonder
+// wachtwoord, altijd live. Gaat voor ?edit en ?plain: met ?demo in de adresbalk tellen die niet.
+const demoMode = new URLSearchParams(location.search).has('demo');
+const editMode = new URLSearchParams(location.search).has('edit') && !demoMode;
 
 /* ------------------------------------------------------------------ */
 /* Laden en ontsleutelen                                               */
@@ -93,9 +97,15 @@ const editMode = new URLSearchParams(location.search).has('edit');
 const isLocalhost = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
 // ?plain en ?edit gaan niet samen: met allebei in de adresbalk geldt de gewone bewerkmodus
 // (versleutelde inhoud, met wachtwoord).
-const usePlain = isLocalhost && new URLSearchParams(location.search).has('plain') && !editMode;
+const usePlain = isLocalhost && new URLSearchParams(location.search).has('plain') && !editMode && !demoMode;
 
 async function loadContent(password) {
+  if (demoMode) {
+    // Vaste bestandsnaam: de demo laadt nooit iets anders dan het openbare voorbeeld.
+    const r = await fetch('content.example.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('De demo kon niet worden geladen (' + r.status + ').');
+    return r.json();
+  }
   if (usePlain) {
     // Alleen voor lokaal ontwikkelen: laadt de onversleutelde content.json.
     const r = await fetch('content.json', { cache: 'no-store' });
@@ -126,7 +136,11 @@ els.form.addEventListener('submit', async (e) => {
   }
 });
 
-if (usePlain) {
+// Het loginscherm toont de link naar de demo, behalve in de bewerkmodus (de demo is altijd live).
+els.demoLink.hidden = editMode;
+if (demoMode) document.getElementById('demo-badge').hidden = false;
+
+if (usePlain || demoMode) {
   loadContent().then(start).catch((err) => { els.loginError.textContent = err.message; });
 }
 

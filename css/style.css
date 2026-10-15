@@ -77,6 +77,14 @@ body {
 .login-card button:focus-visible { outline: 3px solid var(--end-text); outline-offset: 3px; }
 .login-card button:disabled { opacity: .6; cursor: progress; }
 .login-error { color: #ff8a80 !important; min-height: 1.2em; font-size: 14px !important; }
+/* Link naar de demo: een tweede, rustigere knop (rand in plaats van gevuld) */
+.login-demo {
+  display: block; padding: 10px; border: 1.5px solid var(--end-accent); border-radius: 8px;
+  color: var(--end-text); font-weight: 600; text-align: center; text-decoration: none;
+  transition: background .15s;
+}
+.login-demo:hover { background: rgba(60, 207, 126, .12); }
+.login-demo:focus-visible { outline: 3px solid var(--end-text); outline-offset: 3px; }
 
 /* ---------- Podium ---------- */
 .viewport { position: fixed; inset: 0; overflow: hidden; background: var(--wall); }

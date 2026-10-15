@@ -1,5 +1,5 @@
 {
-  "title": "Lean in de praktijk",
+  "title": "Lean in de praktijk (generated demo)",
   "agreements": [
     "Telefoons op stil",
     "Vragen mogen altijd",
@@ -74,7 +74,8 @@
             ],
             [
               { "type": "keyword", "text": "Begin bij wachten", "gap": "line" },
-              { "type": "tip", "text": "Wachten is de makkelijkste om te zien" }
+              { "type": "tip", "text": "Wachten is de makkelijkste om te zien" },
+              { "type": "question", "text": "Waar wacht jouw werk het langst op?" }
             ],
             [
               { "type": "check", "goal": "doel2" }
@@ -94,6 +95,12 @@
             ],
             [
               { "type": "keyword", "text": "Doorlooptijd vs. bewerkingstijd" }
+            ],
+            [
+              { "type": "keyword", "text": "Doorlooptijd: wachten + werken", "indent": 1 },
+              { "type": "keyword", "text": "vaak weken", "indent": 2 },
+              { "type": "keyword", "text": "Bewerkingstijd: echt werken", "indent": 1 },
+              { "type": "keyword", "text": "vaak uren", "indent": 2 }
             ],
             [
               { "type": "tip", "text": "Loop het proces zelf mee" }
@@ -150,7 +157,8 @@
               { "type": "tip", "text": "Kleine stappen, vaak" }
             ],
             [
-              { "type": "keyword", "text": "Gemba", "gap": "space" }
+              { "type": "keyword", "text": "Gemba", "gap": "space" },
+              { "type": "question", "text": "Wanneer was jij voor het laatst op de werkvloer?" }
             ]
           ]
         }
