@@ -6,7 +6,7 @@
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
 import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS } from './content.js';
-import { stepsToText, textToSteps } from './sheet-text.js';
+import { stepsToText, textToSteps, listToText, textToList } from './sheet-text.js';
 
 const STAGE_W = 1600;
 const STAGE_H = 900;
@@ -33,6 +33,7 @@ const els = {
   goals: $('#goals-list'),
   agreementsBox: $('#agreements'),
   agreementsBtn: $('#btn-agreements'),
+  agreementsEditBtn: $('#btn-agreements-edit'),
   kanban: $('.kanban'),
   cols: { todo: $('#col-todo'), doing: $('#col-doing'), done: $('#col-done') },
   addTip: $('#add-tip'),
@@ -64,7 +65,7 @@ let stickies = [];        // knop-elementen, index = onderwerp
 let stickyFontPx = 22;    // maximale lettergrootte op een geeltje, gezet door buildStickies()
 let scale = 1;
 let generation = 0;       // verhoogd bij elke navigatie; oude animatiestappen stoppen dan
-let sheetEditor = null;   // het tekstvak van een vel in de bewerkmodus, zolang het open is (zie openSheetEditor)
+let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafspraken), zolang het open is (zie openTextEditor)
 // Wijzigingen (alleen in het geheugen) gaan direct in het model: tips die tijdens de presentatie
 // worden toegevoegd (type tip, user: true), en in de bewerkmodus bewerken, toevoegen,
 // verwijderen en klikken splitsen of samenvoegen. Voor de export en de telling op het
@@ -145,12 +146,7 @@ function start(raw) {
   for (const f of flat) for (const step of f.steps) for (const item of step) original.set(item, JSON.stringify(item));
 
   // Werkafspraken (standaard verborgen; zonder afspraken ook geen knop)
-  els.agreements.replaceChildren(...deck.agreements.map((text) => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    return li;
-  }));
-  els.agreementsBtn.hidden = deck.agreements.length === 0;
+  renderAgreements();
 
   // Doelen bovenaan het whiteboard: per doel een vakje (met een nog onzichtbaar vinkje) en de
   // tekst. Voor schermlezers staat de toestand er als tekst bij.
@@ -190,6 +186,7 @@ function refitText() {
   fitList(els.tipsSheet, els.tipsList, LIST_FONT_MAX, 18);
   fitList(els.keywordSheet, els.keywordSheet.querySelector('ul'), LIST_FONT_MAX, 20);
   if (!els.question.hidden) fitQuestion();
+  fitAgreements();
 }
 
 /**
@@ -348,7 +345,7 @@ function prev() {
 }
 
 function goTo(target) {
-  if (sheetEditor) return; // eerst opslaan of annuleren
+  if (textEditor) return; // eerst opslaan of annuleren
   if (target.sheet === pos.sheet && target.step === pos.step) return;
   const previous = pos;
   pos = target;
@@ -466,12 +463,15 @@ function updateButtons() {
   const b = els.next;
   const label = isStart(pos) ? 'Start' : isLastContent(pos) ? 'Einde' : null;
   b.classList.toggle('labeled', label !== null);
-  b.disabled = isEnd(pos);
+  const editing = textEditor !== null; // zolang een tekstvak open is: niet bladeren (zie goTo)
+  b.disabled = isEnd(pos) || editing;
   b.textContent = label ? label + ' ›' : '›';
   b.title = isStart(pos) ? 'Presentatie starten (→)' : label ? 'Naar het afsluitscherm (→)' : 'Volgende (→)';
-  els.prev.disabled = isStart(pos);
-  els.editBtn.disabled = !isContent(pos) || sheetEditor !== null; // niets te bewerken op het start- of afsluitscherm
-  els.agreementsBtn.disabled = !isContent(pos);
+  els.prev.disabled = isStart(pos) || editing;
+  for (const sticky of stickies) sticky.disabled = editing;
+  els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
+  els.agreementsBtn.disabled = !isContent(pos) || editing;
+  els.agreementsEditBtn.disabled = !isContent(pos) || editing;
 }
 
 /**
@@ -820,65 +820,107 @@ els.tipInput.addEventListener('blur', () => { if (!els.tipForm.hidden) submitTip
 // Opslaan (of Ctrl+Enter) verwerkt alles in één keer, daarna is het hele vel in beeld; Annuleren
 // (of Esc) laat het vel zoals het was. De titel van het vel bewerk je los: klik erop (of Tab
 // ernaartoe en Enter) en hij wordt een invoerveld. Tips bewerk je via het tekstvak; een klik op
-// een tip links zegt op welk vel hij staat. Alles gaat in het model; de export op het
-// afsluitscherm neemt het over.
+// een tip links zegt op welk vel hij staat. De werkafspraken bewerk je op dezelfde manier, als
+// ze in beeld zijn: klik erop, de knop "Werkafspraken bewerken" of A; één afspraak per regel.
+// Alles gaat in het model; de export op het afsluitscherm neemt het over.
 
-// sheetEditor (bovenaan gedeclareerd): { box, input, opener } zolang het tekstvak open is
+// textEditor (bovenaan gedeclareerd): { box, input, opener, onSave } zolang een tekstvak open is
 
-function openSheetEditor() {
-  if (!editMode || sheetEditor || !isContent(pos)) return;
+const code = (t) => `<code>${t}</code>`;
+
+/**
+ * Opent een tekstvak met uitleg en de knoppen Annuleren en Opslaan over host heen. Er is altijd
+ * hooguit één tekstvak open; zolang dat zo is, kun je niet bladeren.
+ * label: naam van de groep; textLabel: naam van het tekstvak; help: regels uitleg (HTML).
+ */
+function openTextEditor({ host, className = '', label, textLabel, text, help, onSave }) {
+  if (!editMode || textEditor || !isContent(pos)) return;
   finishAllAnimations();
-  const f = flat[pos.sheet];
   const box = document.createElement('div');
-  box.className = 'sheet-editor';
+  box.className = ('sheet-editor ' + className).trim();
   box.setAttribute('role', 'group');
-  box.setAttribute('aria-label', 'Vel bewerken: ' + f.title);
+  box.setAttribute('aria-label', label);
   box.innerHTML = `
-    <textarea class="sheet-editor-text" aria-label="Klikken van het vel als tekst" aria-describedby="sheet-editor-help"></textarea>
-    <p class="sheet-editor-help" id="sheet-editor-help"></p>
+    <textarea class="sheet-editor-text" aria-describedby="text-editor-help"></textarea>
+    <p class="sheet-editor-help" id="text-editor-help"></p>
     <div class="sheet-editor-buttons">
       <button type="button" data-action="cancel" title="Wijzigingen weggooien (Esc)">Annuleren</button>
       <button type="button" data-action="save" class="primary" title="Opslaan (Ctrl+Enter)">Opslaan</button>
     </div>`;
-  // Zo kort mogelijk, en algemeen: niets uit de inhoud van deze presentatie.
-  const code = (t) => `<code>${t}</code>`;
-  box.querySelector('.sheet-editor-help').innerHTML = [
-    `${code('*')} ${code('-')} ${code('1.')} steekwoord, 2/4 spaties inspringen`,
-    `lege regel ruimte, ${code('---')} lijn, ${code('-&gt;')} klik`,
-    `${code('?')} vraag, ${code('!')} tip, ${code('+id')} doel afvinken`,
-    `${code('[kleur]')} ${[...KEYWORD_COLORS].join(' ')}`,
-  ].join('<br>');
+  box.querySelector('.sheet-editor-help').innerHTML = help.join('<br>');
   const input = box.querySelector('textarea');
-  input.value = stepsToText(f.steps);
-  sheetEditor = { box, input, opener: document.activeElement };
+  input.setAttribute('aria-label', textLabel);
+  input.value = text;
+  textEditor = { box, input, opener: document.activeElement, onSave };
 
   box.addEventListener('click', (e) => {
+    e.stopPropagation(); // niet doorgeven aan wat eronder ligt (dat zou het tekstvak meteen weer openen)
     const action = e.target.closest('[data-action]')?.dataset.action;
-    if (action) closeSheetEditor(action === 'save');
+    if (action) closeTextEditor(action === 'save');
   });
   box.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSheetEditor(false);
-    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeSheetEditor(true);
+    if (e.key === 'Escape') closeTextEditor(false);
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeTextEditor(true);
     else return;
     e.preventDefault();
     e.stopPropagation();
   });
 
-  els.keywordPad.append(box);
+  host.append(box);
   updateButtons();
   input.focus({ preventScroll: true });
   input.setSelectionRange(0, 0);
   input.scrollTop = 0;
 }
 
-function closeSheetEditor(save) {
-  if (!sheetEditor) return;
-  const { box, input, opener } = sheetEditor;
-  sheetEditor = null;
+function closeTextEditor(save) {
+  if (!textEditor) return;
+  const { box, input, opener, onSave } = textEditor;
+  textEditor = null;
   box.remove();
-  if (save) saveSheet(input.value);
+  if (save) onSave(input.value);
   updateButtons();
   if (opener?.isConnected && opener !== document.body) opener.focus({ preventScroll: true });
+}
+
+function openSheetEditor() {
+  if (!isContent(pos)) return;
+  const f = flat[pos.sheet];
+  openTextEditor({
+    host: els.keywordPad,
+    label: 'Vel bewerken: ' + f.title,
+    textLabel: 'Klikken van het vel als tekst',
+    text: stepsToText(f.steps),
+    // Zo kort mogelijk, en algemeen: niets uit de inhoud van deze presentatie.
+    help: [
+      `${code('*')} ${code('-')} ${code('1.')} steekwoord, 2/4 spaties inspringen`,
+      `lege regel ruimte, ${code('---')} lijn, ${code('-&gt;')} klik`,
+      `${code('?')} vraag, ${code('!')} tip, ${code('+id')} doel afvinken`,
+      `${code('[kleur]')} ${[...KEYWORD_COLORS].join(' ')}`,
+    ],
+    onSave: saveSheet,
+  });
+}
+
+/** Alleen als de werkafspraken in beeld zijn. */
+function openAgreementsEditor() {
+  if (els.agreementsBox.hidden) return;
+  openTextEditor({
+    host: els.agreementsBox,
+    className: 'agreements-editor',
+    label: 'Werkafspraken bewerken',
+    textLabel: 'Werkafspraken, één per regel',
+    text: listToText(deck.agreements),
+    help: [`Eén werkafspraak per regel. ${code('-')} ${code('*')} ${code('•')} of ${code('1.')} aan het begin en lege regels vallen weg.`],
+    onSave: saveAgreements,
+  });
+}
+
+function saveAgreements(text) {
+  const list = textToList(text);
+  if (JSON.stringify(list) === JSON.stringify(deck.agreements)) return;
+  deck.agreements = list;
+  renderAgreements();
 }
 
 /** Sleutel om items te vergelijken, ongeacht de volgorde van de velden. */
@@ -914,7 +956,7 @@ function saveSheet(text) {
  * annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren.
  */
 function editTitle() {
-  if (!editMode || sheetEditor || !isContent(pos) || els.keywordTitle.hidden) return;
+  if (!editMode || textEditor || !isContent(pos) || els.keywordTitle.hidden) return;
   finishAllAnimations();
   const i = pos.sheet;
   const f = flat[i];
@@ -973,6 +1015,8 @@ if (editMode) {
   $('#edit-badge').hidden = false;
   els.editBtn.hidden = false;
   els.editBtn.addEventListener('click', () => openSheetEditor());
+  els.agreementsEditBtn.addEventListener('click', () => openAgreementsEditor());
+  els.agreementsBox.addEventListener('click', () => openAgreementsEditor());
   els.keywordSheet.addEventListener('click', () => openSheetEditor());
   // De titel: klikken of (met het toetsenbord) Enter bewerkt alleen de titel.
   const heading = els.keywordTitle;
@@ -1369,7 +1413,7 @@ window.addEventListener('resize', () => { if (deck) fitStage(); });
 document.addEventListener('keydown', (e) => {
   if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.target.closest?.('input, select, textarea')) return; // tijdens typen of kiezen niet navigeren
-  if (sheetEditor) return; // het tekstvak van het vel regelt zijn eigen toetsen
+  if (textEditor) return; // het tekstvak regelt zijn eigen toetsen
   if (e.key === ' ' && e.target === els.pdf) return; // spatie bedient de PDF-knop, niet "volgende"
   const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Spacebar'];
   const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'];
@@ -1387,6 +1431,7 @@ document.addEventListener('keydown', (e) => {
   // zojuist gefocuste tekstveld belandt; bij E net zo.
   else if (e.key === '+' && isContent(pos) && !editMode) { e.preventDefault(); openTipForm(); }
   else if ((e.key === 'e' || e.key === 'E') && editMode && isContent(pos)) { e.preventDefault(); openSheetEditor(); }
+  else if ((e.key === 'a' || e.key === 'A') && editMode && !els.agreementsBox.hidden) { e.preventDefault(); openAgreementsEditor(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -1399,16 +1444,41 @@ els.agreementsBtn.addEventListener('click', (e) => { e.currentTarget.blur(); tog
  * hele whiteboard en blijven staan tijdens het bladeren, tot je ze weer verbergt.
  */
 function toggleAgreements(show = els.agreementsBox.hidden) {
-  if (show && (!isContent(pos) || deck.agreements.length === 0)) return;
+  if (show && (!isContent(pos) || (deck.agreements.length === 0 && !editMode))) return;
   const box = els.agreementsBox;
   if (box.getAnimations().length) finishAllAnimations(); // nog aan het in- of uitfaden: eerst afronden
   els.agreementsBtn.setAttribute('aria-pressed', String(show));
   if (show === !box.hidden) return;
+  els.agreementsEditBtn.hidden = !(editMode && show);
   if (show) {
     box.hidden = false;
+    fitAgreements();
     animate(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
   } else {
     animate(box, [{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in' }, () => { box.hidden = true; });
+  }
+}
+
+/** Zet de werkafspraken op het bord. Zonder afspraken geen knop, behalve in de bewerkmodus. */
+function renderAgreements() {
+  els.agreements.replaceChildren(...deck.agreements.map((text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }));
+  els.agreementsBtn.hidden = deck.agreements.length === 0 && !editMode;
+  fitAgreements();
+}
+
+/** Verkleint de letters van de werkafspraken tot alles op het bord past (alleen als ze in beeld zijn). */
+function fitAgreements() {
+  const box = els.agreementsBox;
+  if (box.hidden) return;
+  let size = 40;
+  els.agreements.style.setProperty('--agree-font', size + 'px');
+  while (box.scrollHeight > box.clientHeight && size > 20) {
+    size -= 2;
+    els.agreements.style.setProperty('--agree-font', size + 'px');
   }
 }
 
@@ -1470,9 +1540,16 @@ function updateDownload() {
   if (removed) parts.push(count(removed, 'verwijderd'));
   const titles = flat.filter((f) => f.title !== rawContent.topics?.[f.topic]?.sheets?.[f.sheet]?.title).length;
   if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
+  if (agreementsChanged()) parts.push('de werkafspraken gewijzigd');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
   els.endNote.textContent = `Je hebt ${list}. `
     + 'Dit bestand is onversleuteld: zet het in de projectmap, versleutel het opnieuw en verwijder de download.';
+}
+
+/** Zijn de werkafspraken anders dan in de geladen inhoud? */
+function agreementsChanged() {
+  const loaded = Array.isArray(rawContent.agreements) ? rawContent.agreements.map(String) : [];
+  return JSON.stringify(deck.agreements) !== JSON.stringify(loaded);
 }
 
 /**
@@ -1493,6 +1570,7 @@ function contentWithChanges() {
     sheet.title = f.title;
     sheet.steps = f.steps.map((step) => step.map((item) => structuredClone(item)));
   }
+  if (agreementsChanged()) copy.agreements = [...deck.agreements];
   return copy;
 }
 

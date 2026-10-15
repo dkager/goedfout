@@ -35,6 +35,28 @@ const COLOR_NAMES = new Map([...KEYWORD_COLORS].flatMap((c) => [[c, c], [DUTCH[c
 const INVISIBLE = '\\u200B-\\u200F\\u2060\\uFEFF\\u00AD\\u202A-\\u202E\\u2066-\\u2069';
 const BLANK = new RegExp(`[\\s${INVISIBLE}]`);
 const LEADING = new RegExp(`^[\\s${INVISIBLE}]*`);
+// Regeleinden: \n, \r\n, een losse \r en de Unicode-regelscheidingen U+2028 en U+2029.
+const LINE_BREAKS = new RegExp('\\r\\n?|[\\n\\u2028\\u2029]');
+
+/** Een lijst teksten (zoals de werkafspraken) als tekst: één per regel. */
+export function listToText(items) {
+  return items.length ? items.join('\n') + '\n' : '';
+}
+
+/**
+ * Leest een lijst terug: één tekst per regel. Een * - • of 1. aan het begin valt weg (zodat je
+ * een lijstje kunt plakken), net als lege regels en regels met alleen codes.
+ */
+export function textToList(text) {
+  const out = [];
+  for (const raw of text.split(LINE_BREAKS)) {
+    let line = clean(raw);
+    const marker = /^(?:[*•-]|\d+\.(?=\s|$))\s*([^]*)$/.exec(line);
+    if (marker) line = clean(marker[1]);
+    if (hasText(line)) out.push(line);
+  }
+  return out;
+}
 
 /** De klikken (steps) van een vel als tekst. Genummerde steekwoorden krijgen hun echte nummer. */
 export function stepsToText(steps) {
@@ -70,7 +92,7 @@ export function stepsToText(steps) {
  */
 export function textToSteps(text, goalIds) {
   const goals = new Map([...goalIds].map((id) => [id.toLowerCase(), id]));
-  const lines = text.split(/\r\n?|[\n\u2028\u2029]/);
+  const lines = text.split(LINE_BREAKS);
 
   const steps = [[]];
   let gap = null;          // ruimte die wacht op het volgende steekwoord

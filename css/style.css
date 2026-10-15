@@ -269,6 +269,8 @@ body {
 .edit-mode .tips-list li { cursor: help; }
 /* Geen plusje: in de bewerkmodus komen tips via het tekstvak van een vel */
 .edit-mode .add-tip { display: none; }
+/* De werkafspraken (als ze in beeld zijn) zijn aanklikbaar: dan opent hun tekstvak */
+.edit-mode .agreements { cursor: text; }
 
 /* Tekstvak over het hele vel, met de uitleg en de knoppen eronder */
 .sheet-editor {
@@ -299,6 +301,9 @@ body {
 .sheet-editor-buttons button.primary { border-color: var(--ink-blue); background: var(--ink-blue); color: #fff; }
 .sheet-editor-buttons button:hover { filter: brightness(.95); }
 .sheet-editor-buttons button:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 2px; }
+
+/* Hetzelfde tekstvak over de werkafspraken: het hele whiteboard */
+.sheet-editor.agreements-editor { inset: 0; padding: 18px 24px; cursor: auto; }
 
 /* Korte melding boven de bedieningsbalk. Altijd in de pagina (een voorleesregio), leeg onzichtbaar. */
 .edit-notice {
@@ -493,10 +498,11 @@ body {
   content: ''; position: absolute; left: 0; right: 0; top: 0; height: 22%;
   background: linear-gradient(180deg, rgba(0,0,0,.035), transparent);
 }
-.sticky:hover .note, .sticky:focus-visible .note {
+.sticky:not(:disabled):hover .note, .sticky:focus-visible .note {
   transform: rotate(var(--rot, 0deg)) scale(1.06);
   box-shadow: 2px 6px 10px rgba(0,0,0,.25);
 }
+.sticky:disabled { cursor: default; } /* zolang een tekstvak open is (bewerkmodus) */
 .sticky:focus-visible { outline: none; }
 .sticky:focus-visible .note { outline: 3px solid var(--ink-blue); outline-offset: 2px; }
 .sticky.moving { z-index: 20; }
@@ -506,7 +512,7 @@ body {
 /* ---------- Werkafspraken (overlay over het hele bord, met de knop in de bedieningsbalk) ---------- */
 .agreements {
   position: absolute; inset: 0; z-index: 40; /* boven verschuivende geeltjes (z-index 20) */
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column; justify-content: safe center; /* te lang: bovenaan beginnen */
   padding: 40px 70px;
   /* Het bord eronder is bijna helemaal weggeveegd */
   background: radial-gradient(ellipse at 50% 45%, rgba(255,255,255,.99) 60%, rgba(255,255,255,.94) 100%);
@@ -520,10 +526,10 @@ body {
 }
 .agreements ul {
   list-style: none; margin: 0; padding: 0;
-  font-family: var(--hand); font-weight: 700; font-size: 40px; line-height: 1.2;
+  font-family: var(--hand); font-weight: 700; font-size: var(--agree-font, 40px); line-height: 1.2; /* zie fitAgreements() */
   color: var(--ink-black);
 }
-.agreements li { padding-left: 1.1em; position: relative; margin-bottom: 10px; }
+.agreements li { padding-left: 1.1em; position: relative; margin-bottom: .25em; } /* schaalt mee met fitAgreements() */
 .agreements li::before { content: '✓'; position: absolute; left: 0; color: var(--ink-blue); }
 
 /* ---------- Bediening ---------- */
