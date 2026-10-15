@@ -32,7 +32,7 @@
         <div class="pad">
           <div class="sheet" id="tips-sheet">
             <h2 class="sheet-heading">Tips</h2>
-            <button type="button" class="add-tip" id="add-tip" title="Tip toevoegen" aria-label="Tip toevoegen">+</button>
+            <button type="button" class="add-tip" id="add-tip" title="Tip toevoegen (T)" aria-label="Tip toevoegen" aria-keyshortcuts="T">+</button>
             <ul class="sheet-list tips-list" id="tips-list"></ul>
             <!-- Voorleesregel: alleen de nieuwe tips van de laatste klik (niet de hele lijst, die
                  bij terugbladeren opnieuw wordt opgebouwd); zie announceTips() in app.js -->
@@ -59,8 +59,8 @@
               </div>
               <!-- Alleen in de bewerkmodus: onderwerp toevoegen (na het huidige) of het huidige verwijderen -->
               <div class="kb-edit" id="topic-tools" hidden>
-                <button type="button" id="btn-topic-add" aria-keyshortcuts="G">+ Onderwerp</button>
-                <button type="button" id="btn-topic-delete" aria-keyshortcuts="S">Onderwerp verwijderen</button>
+                <button type="button" id="btn-topic-add">+ Onderwerp</button>
+                <button type="button" id="btn-topic-delete">Onderwerp verwijderen</button>
               </div>
             </div>
             <div class="kb-col" data-col="done"><h3>Done</h3><div class="kb-cards" id="col-done"></div></div>
@@ -137,15 +137,15 @@
       <button id="btn-full" aria-label="Volledig scherm" aria-keyshortcuts="F" title="Volledig scherm (F)">⛶</button>
       <!-- Alleen met ?edit in de adresbalk -->
       <span id="edit-badge" class="edit-badge" hidden>✎ Bewerken</span>
-      <button id="btn-edit" class="labeled" hidden aria-keyshortcuts="E"
-              title="Dit vel bewerken als tekst (E)">Vel bewerken</button>
-      <button id="btn-sheet-add" class="labeled" hidden aria-keyshortcuts="N"
-              title="Nieuw vel na dit vel, bij hetzelfde onderwerp (N)">Vel toevoegen</button>
-      <button id="btn-sheet-delete" class="labeled" hidden aria-keyshortcuts="V"
-              title="Dit vel verwijderen (V)">Vel verwijderen</button>
+      <button id="btn-edit" class="labeled" hidden
+              title="Dit vel bewerken als tekst">Vel bewerken</button>
+      <button id="btn-sheet-add" class="labeled" hidden
+              title="Nieuw vel na dit vel, bij hetzelfde onderwerp">Vel toevoegen</button>
+      <button id="btn-sheet-delete" class="labeled" hidden
+              title="Dit vel verwijderen">Vel verwijderen</button>
       <!-- Alleen in de bewerkmodus, en alleen zolang de werkafspraken in beeld zijn -->
-      <button id="btn-agreements-edit" class="labeled" hidden aria-keyshortcuts="A"
-              title="Werkafspraken bewerken als tekst (A)">Werkafspraken bewerken</button>
+      <button id="btn-agreements-edit" class="labeled" hidden
+              title="Werkafspraken bewerken als tekst">Werkafspraken bewerken</button>
     </nav>
   </div>
 

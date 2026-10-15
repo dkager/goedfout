@@ -8,7 +8,7 @@
  * Soorten items. Een nieuw type hier toevoegen, en de weergave in app.js
  * (keywordsAt/tipsAt/questionAt/checkedGoalsAt). "check" vinkt een doel af ({ type, goal }).
  */
-export const ITEM_TYPES = new Set(['keyword', 'tip', 'question', 'check']);
+const ITEM_TYPES = new Set(['keyword', 'tip', 'question', 'check']);
 
 /**
  * De vaste ids van de doelen, in volgorde en dus ook hun vak in de strook bovenaan het

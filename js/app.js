@@ -2,7 +2,7 @@
 // flip-over links (tips) en rechts (steekwoorden). Alle weergave wordt afgeleid uit één positie:
 //   pos = { sheet: index in de platte lijst van vellen, step: aantal uitgevoerde steps (klikken) }
 // sheet === -1 is het donkere startscherm, sheet === aantal vellen het donkere afsluitscherm.
-// Een step is een lijst van items (keyword, tip, question) die bij één klik verschijnen.
+// Een step is een lijst van items (keyword, tip, question, check) die bij één klik verschijnen.
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
 import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, TOPICS_MAX, dropRepeatedChecks } from './content.js';
@@ -148,8 +148,8 @@ function start(raw) {
   // De titel uit de JSON ook op het startscherm, onder "WELKOM" (zonder title in de JSON: niets).
   // In de bewerkmodus altijd, zodat hij te bewerken is (zonder titel in de JSON: "Presentatie").
   const subtitle = els.startSubtitle;
-  subtitle.textContent = typeof raw.title === 'string' ? raw.title.trim() : '';
-  if (editMode && !subtitle.textContent) subtitle.textContent = deck.title;
+  const shownTitle = typeof raw.title === 'string' ? raw.title.trim() : '';
+  setEditableText(subtitle, shownTitle || (editMode ? deck.title : ''));
   subtitle.hidden = subtitle.textContent === '';
   loadedTitle = deck.title;
 
@@ -180,7 +180,8 @@ function start(raw) {
 
 /**
  * Bouwt de platte lijst van vellen (flat) opnieuw op uit het model: bij het laden, en na het
- * toevoegen of verwijderen van een vel. De steps zijn dezelfde lijsten als in het model.
+ * toevoegen, verwijderen of verplaatsen van een vel of onderwerp. De steps zijn dezelfde lijsten
+ * als in het model.
  */
 function rebuildFlat() {
   flat = [];
@@ -189,6 +190,21 @@ function rebuildFlat() {
     firstSheetOfTopic[t] = flat.length;
     topic.sheets.forEach((sheet, s) => flat.push({ topic: t, sheet: s, title: sheet.title, steps: sheet.steps, model: sheet }));
   });
+}
+
+/**
+ * Zet de tekst van iets wat je in de bewerkmodus kunt aanklikken om te bewerken (de titel van een
+ * vel, de titel van de presentatie). In de bewerkmodus staat de tekst in een echte knop: die is met
+ * Tab te bereiken, en Enter en spatie doen daarop (door de browser) hetzelfde als een klik.
+ */
+function setEditableText(el, text) {
+  if (!editMode) { el.textContent = text; return; }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'edit-text-btn';
+  button.textContent = text;
+  button.title = 'Titel bewerken';
+  el.replaceChildren(button);
 }
 
 /** Past alle tekstgroottes opnieuw aan de beschikbare ruimte aan. */
@@ -255,7 +271,7 @@ function buildStickies() {
     b.addEventListener('click', () => {
       // In de bewerkmodus is het geeltje in Doing (het huidige onderwerp) de plek om de naam te wijzigen.
       if (editMode && isContent(pos) && flat[pos.sheet].topic === t) return editTopicName();
-      b.blur(); // zodat spatie daarna "volgende" blijft
+      b.blur(); // de focus niet op het geeltje laten staan
       goTo({ sheet: firstSheetOfTopic[t], step: 0 });
     });
     return b;
@@ -302,15 +318,17 @@ const titleAt = (p) => (isContent(p) ? flat[p.sheet].title : '');
 /** Alle items van de uitgevoerde steps van het huidige vel, in volgorde. */
 const shownItems = (p) => (isContent(p) ? flat[p.sheet].steps.slice(0, p.step).flat() : []);
 
-// Regels op de flip-overs: { text, …eigenschappen, ref }. ref is het item in het model, zodat
-// een regel bewerkt kan worden.
+// Regels op de flip-overs: { text, …eigenschappen }.
 function keywordsAt(p) {
   return shownItems(p).filter((it) => it.type === 'keyword').map((it) => ({
-    text: it.text, color: colorOf(it), indent: indentOf(it), numbered: it.numbered === true, gap: gapOf(it), ref: it,
+    text: it.text, color: colorOf(it), indent: indentOf(it), numbered: it.numbered === true, gap: gapOf(it),
   }));
 }
 
-/** Alle tips tot en met positie p, in volgorde (tips blijven staan over de vellen heen). */
+/**
+ * Alle tips tot en met positie p, in volgorde (tips blijven staan over de vellen heen). ref is het
+ * item in het model: in de bewerkmodus zegt een klik op een tip op welk vel die staat.
+ */
 function tipsAt(p) {
   const out = [];
   const last = Math.min(p.sheet, flat.length);
@@ -407,7 +425,7 @@ function render(previous) {
   // Steekwoorden rechts (met omslaand vel als het vel verandert). Niet van of naar het start-
   // of afsluitscherm: dan valt er niets om te slaan.
   if (sheetTurned && animate) turnSheet(pos.sheet > previous.sheet);
-  els.keywordTitle.textContent = titleAt(pos);
+  setEditableText(els.keywordTitle, titleAt(pos));
   setList(els.keywordSheet.querySelector('ul'), keywordsAt(pos), animate && previous.sheet === pos.sheet);
   fitList(els.keywordSheet, els.keywordSheet.querySelector('ul'), LIST_FONT_MAX, 20);
 
@@ -489,7 +507,7 @@ function updateButtons() {
   const currentTopic = isContent(pos) ? flat[pos.sheet].topic : -1;
   stickies.forEach((sticky, t) => {
     sticky.disabled = editing;
-    sticky.title = editMode && t === currentTopic ? 'Naam van dit onderwerp wijzigen (klik of Enter)' : 'Ga naar: ' + deck.topics[t].sticky;
+    sticky.title = editMode && t === currentTopic ? 'Naam van dit onderwerp wijzigen' : 'Ga naar: ' + deck.topics[t].sticky;
   });
   els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos) || editing;
@@ -498,15 +516,15 @@ function updateButtons() {
   updateMoveButtons(editing);
   const full = deck.topics.length >= TOPICS_MAX;
   els.addTopicBtn.disabled = !isContent(pos) || editing || full;
-  els.addTopicBtn.title = full ? `Er passen hooguit ${TOPICS_MAX} onderwerpen` : 'Nieuw onderwerp na dit onderwerp (G)';
+  els.addTopicBtn.title = full ? `Er passen hooguit ${TOPICS_MAX} onderwerpen` : 'Nieuw onderwerp na dit onderwerp';
   const onlyTopic = deck.topics.length === 1;
   els.deleteTopicBtn.disabled = !isContent(pos) || editing || onlyTopic;
-  els.deleteTopicBtn.title = onlyTopic ? 'Er moet altijd minstens één onderwerp zijn' : 'Dit onderwerp verwijderen (S)';
+  els.deleteTopicBtn.title = onlyTopic ? 'Er moet altijd minstens één onderwerp zijn' : 'Dit onderwerp verwijderen';
   const onlySheet = isContent(pos) && deck.topics[flat[pos.sheet].topic].sheets.length === 1;
   const lastSheet = onlySheet && deck.topics.length === 1;
   els.deleteSheetBtn.disabled = !isContent(pos) || editing || lastSheet;
   els.deleteSheetBtn.title = lastSheet ? 'Het enige vel van de presentatie kan niet weg'
-    : onlySheet ? 'Dit vel verwijderen (V); het onderwerp verdwijnt dan ook' : 'Dit vel verwijderen (V)';
+    : onlySheet ? 'Dit vel verwijderen; het onderwerp verdwijnt dan ook' : 'Dit vel verwijderen';
   const addGoalBtn = els.goals.querySelector('.goal-add-btn');
   if (addGoalBtn) addGoalBtn.disabled = !isContent(pos) || editing;
 }
@@ -524,18 +542,17 @@ function buildGoals() {
     li.className = 'goal';
     li.dataset.goal = goal.id;
     li.innerHTML = '<span class="goal-box" aria-hidden="true"><svg class="goal-check" viewBox="0 0 40 40"><path d="M7 22 L16 31 L35 6"/></svg></span>';
-    const text = document.createElement('span');
+    const text = document.createElement(editMode ? 'button' : 'span'); // bewerkmodus: met Tab bereikbaar
     text.className = 'goal-text';
+    if (editMode) text.type = 'button';
     text.textContent = goal.text;
     const state = document.createElement('span');
     state.className = 'sr-only';
     li.append(text, state);
     if (editMode) {
       li.append(goalCode(goal.id));
-      text.tabIndex = 0;
-      text.setAttribute('role', 'button');
       text.setAttribute('aria-describedby', 'goal-code-' + goal.id);
-      text.title = 'Doel bewerken (klik of Enter)';
+      text.title = 'Doel bewerken';
     }
     return li;
   });
@@ -549,8 +566,7 @@ function buildGoals() {
     button.type = 'button';
     button.className = 'goal-add-btn';
     button.textContent = '+ Doel toevoegen';
-    button.title = 'Doel toevoegen (D)';
-    button.setAttribute('aria-keyshortcuts', 'D');
+    button.title = 'Doel toevoegen';
     button.setAttribute('aria-describedby', 'goal-code-' + id);
     li.append(button, goalCode(id));
     items.push(li);
@@ -737,6 +753,7 @@ function fitQuestion() {
 function turnSheet(forward) {
   const sheet = els.keywordSheet;
   const ghost = sheet.cloneNode(true);
+  ghost.inert = true; // alleen beeld: niet met Tab of een schermlezer te bereiken
   ghost.removeAttribute('id');
   for (const el of ghost.querySelectorAll('[id]')) el.removeAttribute('id');
   ghost.classList.add('turning');
@@ -782,7 +799,8 @@ function placeInColumn(el, colName) {
   const col = els.cols[colName];
   const t = Number(el.dataset.topic);
   const before = [...col.children].find((c) => Number(c.dataset.topic) > t);
-  col.insertBefore(el, before || null);
+  // In Doing staan (bewerkmodus) ook de pijlen: het geeltje ertussen, zodat de tabvolgorde ◀, geeltje, ▶ is.
+  col.insertBefore(el, before || col.querySelector('.move-later') || null);
 }
 
 // Tijdlijn van een overgang naar een nieuw onderwerp (ongeveer 2 s):
@@ -879,7 +897,8 @@ function flipMove(movers, target, my) {
 }
 
 /* ---------- Zelf een tip toevoegen ---------- */
-// Plusje op de Tips-flip-over → één regel invoer. Enter (of wegklikken) voegt toe, Esc annuleert.
+// Plusje op de Tips-flip-over (of T) → één regel invoer. Enter (of wegklikken) voegt toe, Esc
+// annuleert. Alleen live: in de bewerkmodus gaan tips via het tekstvak van het vel.
 
 function openTipForm() {
   els.tipForm.hidden = false;
@@ -997,14 +1016,16 @@ if (!editMode) {
 }
 
 /* ---------- Bewerken (?edit) ---------- */
-// Klik op de rechter flip-over (of de knop "Vel bewerken", of E): alle klikken van het vel
-// verschijnen als tekst in één tekstvak ter grootte van het vel (notatie: zie sheet-text.js).
-// Opslaan (of Ctrl+Enter) verwerkt alles in één keer, daarna is het hele vel in beeld; Annuleren
-// (of Esc) laat het vel zoals het was. De titel van het vel bewerk je los: klik erop (of Tab
-// ernaartoe en Enter) en hij wordt een invoerveld. Tips bewerk je via het tekstvak; een klik op
-// een tip links zegt op welk vel hij staat. De werkafspraken bewerk je op dezelfde manier, als
-// ze in beeld zijn: klik erop, de knop "Werkafspraken bewerken" of A; één afspraak per regel.
-// Alles gaat in het model; de export op het afsluitscherm neemt het over.
+// De bewerkmodus heeft geen eigen sneltoetsen: alles wat je kunt bewerken is een echte knop (met
+// Tab bereikbaar; Enter en spatie doen daarop wat de browser bij een knop doet, net als een klik).
+// Klik op de rechter flip-over of de knop "Vel bewerken": alle klikken van het vel verschijnen als
+// tekst in één tekstvak ter grootte van het vel (notatie: zie sheet-text.js). Opslaan (of
+// Ctrl+Enter) verwerkt alles in één keer, daarna is het hele vel in beeld; Annuleren (of Esc) laat
+// het vel zoals het was. De titel van het vel bewerk je los: een klik erop maakt er een invoerveld
+// van. Tips bewerk je via het tekstvak; een klik op een tip links zegt op welk vel hij staat. De
+// werkafspraken bewerk je op dezelfde manier, als ze in beeld zijn (klik erop, of de knop
+// "Werkafspraken bewerken"); één afspraak per regel. Alles gaat in het model; de export op het
+// afsluitscherm neemt het over.
 
 // textEditor (bovenaan gedeclareerd): { box, input, opener, onSave } zolang een tekstvak open is
 
@@ -1161,7 +1182,7 @@ function editInPlace(el, { label, className, onSave, onDone, onCancel }) {
     const kept = save && value !== '';
     if (!kept && onCancel) return onCancel();
     if (kept && value !== original) onSave(value);
-    if (refocus) el.focus({ preventScroll: true });
+    if (refocus) (el.matches('button') ? el : el.querySelector('button') ?? el).focus({ preventScroll: true });
     if (kept) onDone?.();
   };
   input.addEventListener('keydown', (e) => {
@@ -1195,7 +1216,7 @@ function editTitle({ onDone, onCancel } = {}) {
     onSave: (value) => {
       f.title = value;
       deck.topics[f.topic].sheets[f.sheet].title = value;
-      els.keywordTitle.textContent = titleAt(pos);
+      setEditableText(els.keywordTitle, titleAt(pos));
       fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20); // de titel kan langer of korter zijn
     },
   });
@@ -1210,17 +1231,18 @@ function editPresentationTitle() {
     onSave: (value) => {
       deck.title = value;
       document.title = value;
-      els.startSubtitle.textContent = value;
+      setEditableText(els.startSubtitle, value);
     },
   });
 }
 
 /* ---------- Vellen toevoegen en verwijderen (?edit) ---------- */
-// "Vel toevoegen" (of N): een nieuw, leeg vel "Nieuw vel" direct na het huidige, bij hetzelfde
+// "Vel toevoegen": een nieuw, leeg vel "Nieuw vel" direct na het huidige, bij hetzelfde
 // onderwerp. De titel staat meteen open: Enter of wegklikken houdt het vel en opent daarna het
-// tekstvak van het vel; Esc of een lege titel maakt het toevoegen ongedaan. "Vel verwijderen"
-// (of V): het huidige vel weg, na een bevestiging als er iets op staat. Het enige vel van een
-// onderwerp kan niet weg. Na beide wordt de lijst met vellen opnieuw opgebouwd en alles getekend.
+// tekstvak van het vel; Esc of een lege titel maakt het toevoegen ongedaan. "Vel verwijderen": het
+// huidige vel weg, na een bevestiging als er iets op staat. Is het het enige vel van zijn
+// onderwerp, dan verdwijnt het onderwerp mee (altijd na bevestiging); het enige vel van de hele
+// presentatie kan niet weg (de knop is dan uitgeschakeld). Daarna wordt alles opnieuw getekend.
 
 const NEW_SHEET_TITLE = 'Nieuw vel';
 
@@ -1253,7 +1275,7 @@ function deleteSheet() {
   const what = f.steps.length ? `Op dit vel staan ${describeContent(f.steps)}. Die verdwijnen mee.` : '';
   if (sheets.length === 1) {
     // Het enige vel van het onderwerp: dan verdwijnt het onderwerp ook (altijd bevestigen).
-    if (deck.topics.length === 1) return showNotice('Dit is het enige vel van de presentatie; dat kan niet weg.');
+    if (deck.topics.length === 1) return; // het enige vel van de presentatie (de knop is dan uit)
     const sticky = deck.topics[f.topic].sticky;
     if (!confirm(`Vel „${f.title}” verwijderen?\n\nDit is het enige vel van onderwerp „${sticky}”, dus dat onderwerp verdwijnt ook. ${what}`.trim())) return;
     return removeTopicAt(f.topic);
@@ -1269,10 +1291,10 @@ function deleteSheet() {
 
 /* ---------- Onderwerpen (geeltjes) bewerken (?edit) ---------- */
 // Alleen het huidige onderwerp, het geeltje in Doing: klik erop (of Tab en Enter) om de naam te
-// wijzigen. Onder dat geeltje: "+ Onderwerp" (G) voegt na het huidige onderwerp een onderwerp
+// wijzigen. Onder dat geeltje: "+ Onderwerp" voegt na het huidige onderwerp een onderwerp
 // toe met één leeg vel; de naam "Nieuw onderwerp" staat dan meteen open (Esc of leeg maakt het
 // toevoegen ongedaan) en daarna opent het tekstvak van het nieuwe vel. "Onderwerp verwijderen"
-// (S) verwijdert het huidige onderwerp, na een bevestiging als er iets op staat; er blijft altijd
+// verwijdert het huidige onderwerp, na een bevestiging als er iets op staat; er blijft altijd
 // minstens één onderwerp. Daarna worden de lijst met vellen en de geeltjes opnieuw opgebouwd.
 
 const NEW_TOPIC_NAME = 'Nieuw onderwerp';
@@ -1300,7 +1322,7 @@ function editTopicName({ onDone, onCancel } = {}) {
 
 function addTopic() {
   if (!editMode || textEditor || !isContent(pos)) return;
-  if (deck.topics.length >= TOPICS_MAX) return showNotice(`Er zijn al ${TOPICS_MAX} onderwerpen; meer passen er niet leesbaar op het bord.`);
+  if (deck.topics.length >= TOPICS_MAX) return; // de knop is dan uit
   const back = pos;
   const t = flat[pos.sheet].topic;
   const topic = { sticky: NEW_TOPIC_NAME, sheets: [{ title: NEW_SHEET_TITLE, steps: [] }] };
@@ -1322,7 +1344,7 @@ function addTopic() {
 
 function deleteTopic() {
   if (!editMode || textEditor || !isContent(pos)) return;
-  if (deck.topics.length === 1) return showNotice('Dit is het enige onderwerp; er moet er altijd minstens één zijn.');
+  if (deck.topics.length === 1) return; // er blijft altijd minstens één onderwerp (de knop is dan uit)
   const t = flat[pos.sheet].topic;
   const topic = deck.topics[t];
   const steps = topic.sheets.flatMap((sheet) => sheet.steps);
@@ -1438,11 +1460,11 @@ function updateMoveButtons(editing) {
 }
 
 /* ---------- Doelen bewerken (?edit) ---------- */
-// Klik op de tekst van een doel (of Tab ernaartoe en Enter): die wordt een invoerveld. Enter of
-// wegklikken slaat op, Esc annuleert. Leeg opslaan verwijdert het doel; wordt het ergens
+// Klik op de tekst van een doel (een knop): die wordt een invoerveld. Enter of wegklikken slaat
+// op, Esc annuleert. Leeg opslaan verwijdert het doel; wordt het ergens
 // afgevinkt, dan eerst een bevestiging, en die afvinkmomenten verdwijnen mee. De doelen erna
 // schuiven een vak op (doel4 wordt doel3, ook in de vellen). Toevoegen kan alleen op het
-// eerstvolgende lege vak: de knop "+ Doel toevoegen" of D.
+// eerstvolgende lege vak: de knop "+ Doel toevoegen".
 
 function editGoal(li) {
   if (!editMode || textEditor || !isContent(pos) || els.goals.querySelector('.goal-edit')) return;
@@ -1493,12 +1515,11 @@ function editGoal(li) {
   input.select();
 }
 
-/** Toevoegen op het eerstvolgende lege vak (de knop "+ Doel toevoegen" of D). */
+/** Toevoegen op het eerstvolgende lege vak (de knop "+ Doel toevoegen"; die is er alleen bij een leeg vak). */
 function addGoal() {
   if (!editMode || textEditor || !isContent(pos)) return;
   const slot = els.goals.querySelector('.goal-add');
-  if (!slot) return showNotice(`Er zijn al ${GOALS_MAX} doelen; meer passen er niet.`);
-  editGoal(slot);
+  if (slot) editGoal(slot);
 }
 
 /** Focus op de tekst van een doel, of op de knop "+ Doel toevoegen" als dat vak leeg is. */
@@ -1580,40 +1601,24 @@ if (editMode) {
   els.agreementsEditBtn.addEventListener('click', () => openAgreementsEditor());
   els.agreementsBox.addEventListener('click', () => openAgreementsEditor());
   els.keywordSheet.addEventListener('click', () => openSheetEditor());
-  // De titel: klikken of (met het toetsenbord) Enter bewerkt alleen de titel.
-  // De titel van de presentatie op het startscherm: net zo.
-  const subtitle = els.startSubtitle;
-  subtitle.tabIndex = 0;
-  subtitle.title = 'Titel bewerken (klik of Enter)';
-  subtitle.addEventListener('click', () => editPresentationTitle());
-  subtitle.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    e.stopPropagation();
-    editPresentationTitle();
-  });
-  const heading = els.keywordTitle;
-  heading.tabIndex = 0;
-  heading.title = 'Titel bewerken (klik of Enter)';
-  heading.addEventListener('click', (e) => { e.stopPropagation(); editTitle(); });
-  heading.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    e.stopPropagation();
-    editTitle();
-  });
-  // Doelen: klik of Enter op de tekst bewerkt; de knop "+ Doel toevoegen" (of D) voegt toe.
+  // De titels (van het vel en van de presentatie) staan in de bewerkmodus in een knop (zie
+  // setEditableText): klikken, of Tab en Enter of spatie, bewerkt alleen de titel.
+  els.startSubtitle.addEventListener('click', () => editPresentationTitle());
+  els.keywordTitle.addEventListener('click', (e) => { e.stopPropagation(); editTitle(); });
+  // De kop van de werkafspraken wordt een knop, zodat ook de werkafspraken met Tab te bereiken zijn.
+  const agreementsHeading = els.agreementsBox.querySelector('h3');
+  const agreementsButton = document.createElement('button');
+  agreementsButton.type = 'button';
+  agreementsButton.className = 'edit-text-btn';
+  agreementsButton.textContent = agreementsHeading.textContent;
+  agreementsButton.title = 'Werkafspraken bewerken';
+  agreementsHeading.replaceChildren(agreementsButton);
+  // Doelen: een klik op de tekst (een knop) bewerkt; de knop "+ Doel toevoegen" voegt toe.
   els.goals.addEventListener('click', (e) => {
     if (e.target.closest('.goal-edit')) return;
     if (e.target.closest('.goal-add-btn')) return addGoal();
     const li = e.target.closest('.goal-text') && e.target.closest('.goal');
     if (li) editGoal(li);
-  });
-  els.goals.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !e.target.classList.contains('goal-text')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    editGoal(e.target.closest('.goal'));
   });
   els.tipsList.addEventListener('click', (e) => {
     const li = e.target.closest('li');
@@ -1621,8 +1626,8 @@ if (editMode) {
     if (!tip) return;
     const i = sheetOf(tip.ref);
     showNotice(i === pos.sheet
-      ? `Deze tip bewerk je via dit vel, „${flat[i].title}”: klik op de rechter flip-over of druk op E.`
-      : `Deze tip bewerk je via het vel „${flat[i].title}”. Ga naar dat vel en klik op de rechter flip-over of druk op E.`);
+      ? `Deze tip bewerk je via dit vel, „${flat[i].title}”: klik op de rechter flip-over of gebruik de knop Vel bewerken.`
+      : `Deze tip bewerk je via het vel „${flat[i].title}”. Ga naar dat vel en klik op de rechter flip-over of gebruik de knop Vel bewerken.`);
   });
 }
 
@@ -2036,33 +2041,25 @@ function fitStage() {
 window.addEventListener('resize', () => { if (deck) { hidePointer(false); fitStage(); } });
 
 document.addEventListener('keydown', (e) => {
-  if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (!deck || e.altKey) return;
   if (e.target.closest?.('input, select, textarea')) return; // tijdens typen of kiezen niet navigeren
   if (textEditor) return; // het tekstvak regelt zijn eigen toetsen
-  if (e.key === ' ' && e.target === els.pdf) return; // spatie bedient de PDF-knop, niet "volgende"
-  const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Spacebar'];
-  const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'];
+  if (e.ctrlKey || e.metaKey) return; // combinaties met Ctrl of Cmd zijn van de browser (zoomen e.d.)
+  const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown'];
+  const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp'];
   if (nextKeys.includes(e.key)) { e.preventDefault(); next(); }
   else if (prevKeys.includes(e.key)) { e.preventDefault(); prev(); }
   else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
   else if (isStart(pos)) return; // op het startscherm werken alleen Start en volledig scherm
   else if (e.key === 'w' || e.key === 'W') toggleAgreements();
+  // T: tipveld (live; in de bewerkmodus gaan tips via het tekstvak van het vel). preventDefault
+  // voorkomt dat de t zelf in het zojuist gefocuste tipveld belandt.
+  else if ((e.key === 't' || e.key === 'T') && isContent(pos) && !editMode) { e.preventDefault(); openTipForm(); }
   else if (e.key === 'Escape' && pointed) hidePointer(true);
   else if (e.key === 'Escape' && !els.agreementsBox.hidden) toggleAgreements(false);
   // Home/End: eerste en laatste inhoud, niet het start- of afsluitscherm
   else if (e.key === 'Home') { e.preventDefault(); goTo(firstContent()); }
   else if (e.key === 'End') { e.preventDefault(); goTo(lastContent()); }
-  // Plus (Shift+= of het numerieke toetsenblok): tip toevoegen (niet in de bewerkmodus; daar
-  // gaan tips via het tekstvak van het vel). preventDefault voorkomt dat de '+' zelf in het
-  // zojuist gefocuste tekstveld belandt; bij E net zo.
-  else if (e.key === '+' && isContent(pos) && !editMode) { e.preventDefault(); openTipForm(); }
-  else if ((e.key === 'e' || e.key === 'E') && editMode && isContent(pos)) { e.preventDefault(); openSheetEditor(); }
-  else if ((e.key === 'a' || e.key === 'A') && editMode && !els.agreementsBox.hidden) { e.preventDefault(); openAgreementsEditor(); }
-  else if ((e.key === 'd' || e.key === 'D') && editMode && isContent(pos)) { e.preventDefault(); addGoal(); }
-  else if ((e.key === 'n' || e.key === 'N') && editMode && isContent(pos)) { e.preventDefault(); addSheet(); }
-  else if ((e.key === 'v' || e.key === 'V') && editMode && isContent(pos)) { e.preventDefault(); deleteSheet(); }
-  else if ((e.key === 'g' || e.key === 'G') && editMode && isContent(pos)) { e.preventDefault(); addTopic(); }
-  else if ((e.key === 's' || e.key === 'S') && editMode && isContent(pos)) { e.preventDefault(); deleteTopic(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -2229,8 +2226,9 @@ function agreementsChanged() {
 /**
  * De geladen inhoud met alle wijzigingen. Werkt op een kopie van de originele JSON; de
  * onderwerpen en hun vellen (namen, titels, klikken, volgorde, ook toegevoegde en verwijderde)
- * komen altijd uit het model. Zonder wijzigingen is dat precies wat er geladen is; ongeldige items, die de motor
- * al oversloeg, vallen weg. Werkafspraken en doelen alleen als ze gewijzigd zijn.
+ * komen altijd uit het model. Zonder wijzigingen is dat precies wat er geladen is; ongeldige
+ * items, die de motor al oversloeg, vallen weg. De titel, de werkafspraken en de doelen alleen
+ * als ze gewijzigd zijn.
  */
 function contentWithChanges() {
   const copy = structuredClone(rawContent);
@@ -2281,7 +2279,7 @@ function preparePrint() {
   printReady = true;
   const now = new Date();
   const date = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long' }).format(now);
-  const title = deck.title || 'Presentatie';
+  const title = deck.title;
   // De paginatitel wordt de voorgestelde bestandsnaam van de PDF.
   titleBeforePrint = document.title;
   document.title = `${title} – vellen – ${date}`;
@@ -2290,13 +2288,11 @@ function preparePrint() {
   const root = els.print;
   root.replaceChildren();
   const page = { title, date, iso: now.toISOString().slice(0, 10) };
-  const filled = (items) => items.filter((it) => it.text.trim() !== ''); // net toegevoegd, nog leeg
   const pages = [];
-  const tips = filled(tipsAt({ sheet: flat.length, step: 0 }));
+  const tips = tipsAt({ sheet: flat.length, step: 0 });
   if (tips.length) pages.push(...printSheet(page, 'tips', 'Tips', tips, 'Alle tips uit de presentatie'));
   flat.forEach((f, i) => {
-    const items = filled(keywordsAt({ sheet: i, step: f.steps.length }));
-    pages.push(...printSheet(page, 'keywords', f.title, items, 'Onderwerp: ' + deck.topics[f.topic].sticky));
+    pages.push(...printSheet(page, 'keywords', f.title, keywordsAt({ sheet: i, step: f.steps.length }), 'Onderwerp: ' + deck.topics[f.topic].sticky));
   });
   pages.forEach((el, i) => { el.querySelector('.print-pagenr').textContent = `Pagina ${i + 1} van ${pages.length}`; });
 }
