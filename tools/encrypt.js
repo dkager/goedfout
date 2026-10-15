@@ -113,7 +113,8 @@ async function main() {
   const pw = await getPassword(true);
   if (pw.length < 16) console.warn('Let op: gebruik bij voorkeur een wachtwoord van 16 tekens of meer.');
 
-  // Compacte JSON scheelt bytes; de inhoud blijft identiek.
+  // Compacte JSON scheelt bytes. Dit is de inhoud zoals normalizeContent hem heeft opgeschoond
+  // (regeleinden worden spaties, doel-ids in kleine letters); content.json zelf blijft ongewijzigd.
   const payload = await encryptText(JSON.stringify(content), pw);
 
   // Controle: kan het resultaat weer ontsleuteld worden?

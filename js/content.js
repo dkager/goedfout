@@ -44,6 +44,48 @@ export const KEYWORD_INDENTS = [0, 1, 2];
 /** Ruimte boven een keyword (`"gap": ...`); zonder gap: niets. */
 export const KEYWORD_GAPS = new Set(['space', 'line']);
 
+// Regeleinden: \n, \r\n, een losse \r, U+2028 en U+2029.
+const LINE_BREAKS = new RegExp('\\r\\n?|[\\n\\u2028\\u2029]');
+
+/**
+ * Een vel, een titel of een item is altijd één regel: regeleinden (met de witruimte eromheen,
+ * ook meerdere na elkaar) worden één spatie. Meldt het als dat nodig was. Lineair: geen regex
+ * die op lange witruimte gaat backtracken.
+ */
+function oneLine(text, where, problems) {
+  const parts = text.split(LINE_BREAKS);
+  if (parts.length === 1) return text;
+  problems.push(`${where}: regeleinde vervangen door een spatie.`);
+  const last = parts.length - 1;
+  return parts.map((part, i) => (i === 0 ? part.trimEnd() : i === last ? part.trimStart() : part.trim())).filter(Boolean).join(' ');
+}
+
+/**
+ * Een doel vink je maar één keer af. Loopt de vellen in volgorde langs en haalt elk volgend
+ * afvinkmoment van een doel weg (een klik die daardoor leeg wordt ook). seen: doel → titel van
+ * het vel waar het al wordt afgevinkt (wordt aangevuld). Geeft de weggehaalde terug als
+ * [{ goal, sheet, first }]. Gedeeld door normalizeContent en de bewerkmodus (app.js).
+ */
+export function dropRepeatedChecks(sheets, seen = new Map()) {
+  const dropped = [];
+  for (const sheet of sheets) {
+    for (const step of sheet.steps) {
+      for (let k = 0; k < step.length; k++) {
+        const item = step[k];
+        if (item.type !== 'check') continue;
+        if (seen.has(item.goal)) {
+          dropped.push({ goal: item.goal, sheet: sheet.title, first: seen.get(item.goal) });
+          step.splice(k--, 1);
+        } else {
+          seen.set(item.goal, sheet.title);
+        }
+      }
+    }
+    for (let s = sheet.steps.length - 1; s >= 0; s--) if (sheet.steps[s].length === 0) sheet.steps.splice(s, 1);
+  }
+  return dropped;
+}
+
 /**
  * Controleert en normaliseert de inhoud. Ongeldige onderdelen worden overgeslagen en als
  * probleem gemeld. Ontbrekende verplichte velden (de titel van een vel) zijn fouten: de
@@ -76,7 +118,7 @@ export function normalizeContent(raw) {
       errors.push(`${at}: moet er zo uitzien: { "id": "${want}", "text": "…" } — overgeslagen.`);
     } else if (goal.id.trim().toLowerCase() !== want) {
       errors.push(`${at}: de id moet "${want}" zijn, niet "${goal.id}". De doelen heten doel1 t/m doel${GOALS_MAX}, op volgorde en zonder gaten — overgeslagen.`);
-    } else if (!goal.text.trim()) {
+    } else if (!(goal.text = oneLine(goal.text, `${at} (${want})`, problems)).trim()) {
       errors.push(`${at} (${want}): de tekst is leeg — overgeslagen.`);
     } else {
       const text = goal.text.trim();
@@ -94,6 +136,7 @@ export function normalizeContent(raw) {
       return { sticky: '', sheets: [emptySheet()] };
     }
     if (typeof t.sticky !== 'string') problems.push(`${where}: "sticky" ontbreekt of is geen tekst.`);
+    else t.sticky = oneLine(t.sticky, `${where} (geeltje)`, problems);
 
     let sheets = [];
     if (Array.isArray(t.sheets)) sheets = t.sheets;
@@ -105,6 +148,7 @@ export function normalizeContent(raw) {
         errors.push(`${at}: is geen vel. Een vel ziet er zo uit: { "title": "…", "steps": [ [ … ], … ] }.`);
         return emptySheet();
       }
+      if (typeof sheet.title === 'string') sheet.title = oneLine(sheet.title, `${at} (titel)`, problems);
       if (typeof sheet.title !== 'string' || !sheet.title.trim()) errors.push(`${at}: "title" ontbreekt — elk vel moet een titel hebben.`);
       if (!Array.isArray(sheet.steps)) problems.push(`${at}: "steps" ontbreekt of is geen lijst — wordt een leeg vel.`);
 
@@ -135,6 +179,7 @@ export function normalizeContent(raw) {
             problems.push(`${atItem}: "text" ontbreekt of is geen tekst — overgeslagen.`);
             return false;
           }
+          item.text = oneLine(item.text, atItem, problems);
           if (item.type === 'question') {
             if (hasQuestion) {
               problems.push(`${atItem}: een step heeft hooguit één vraag — overgeslagen.`);
@@ -170,18 +215,31 @@ export function normalizeContent(raw) {
         return items;
       }).filter(Boolean);
 
+      // Boven het eerste steekwoord van een vel staat niets: daar kan geen ruimte of lijn boven.
+      const first = steps.flat().find((it) => it.type === 'keyword');
+      if (first && first.gap !== undefined) {
+        errors.push(`${at}: het eerste steekwoord van een vel kan geen "gap" hebben (er staat niets boven) — genegeerd.`);
+        delete first.gap;
+      }
       return { title: typeof sheet.title === 'string' ? sheet.title : '', steps };
     });
     if (sheets.length === 0) sheets = [emptySheet()]; // een onderwerp heeft altijd minstens één (leeg) vel
     return { sticky: String(t.sticky ?? ''), sheets };
   });
 
-  if (raw.title !== undefined && typeof raw.title !== 'string') problems.push('"title" is geen tekst.');
+  if (typeof raw.title === 'string') raw.title = oneLine(raw.title, 'De titel van de presentatie', problems);
+  if (typeof raw.title !== 'string' || !raw.title.trim()) errors.push('"title" ontbreekt — de presentatie moet een titel hebben.');
   if (raw.agreements !== undefined && !Array.isArray(raw.agreements)) problems.push('"agreements" is geen lijst.');
+  if (Array.isArray(raw.agreements)) raw.agreements = raw.agreements.map((a, n) => oneLine(String(a), `Werkafspraak ${n + 1}`, problems));
+
+  // Een doel vink je maar één keer af (in de volgorde van de presentatie telt het eerste).
+  for (const d of dropRepeatedChecks(topics.flatMap((t) => t.sheets))) {
+    errors.push(`Vel „${d.sheet}”: ${d.goal} wordt al afgevinkt op „${d.first}”; een doel vink je maar één keer af — overgeslagen.`);
+  }
 
   return {
     content: {
-      title: typeof raw.title === 'string' ? raw.title : 'Presentatie',
+      title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : 'Presentatie',
       agreements: Array.isArray(raw.agreements) ? raw.agreements.map(String) : [],
       goals,
       topics,

@@ -132,7 +132,7 @@ export function textToSteps(text, goalIds) {
     const goalMatch = /^\+(\S+)$/.exec(text);
     const goal = goalMatch && goals.get(goalMatch[1].toLowerCase());
     if (goal) {
-      if (!step().some((it) => it.type === 'check' && it.goal === goal)) step().push({ type: 'check', goal });
+      step().push({ type: 'check', goal }); // een doel twee keer afvinken: zie dropRepeatedChecks in content.js
       gap = null;
       continue;
     }

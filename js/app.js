@@ -5,7 +5,7 @@
 // Een step is een lijst van items (keyword, tip, question) die bij één klik verschijnen.
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
-import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, TOPICS_MAX } from './content.js';
+import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, TOPICS_MAX, dropRepeatedChecks } from './content.js';
 import { stepsToText, textToSteps, listToText, textToList } from './sheet-text.js';
 
 const STAGE_W = 1600;
@@ -1045,9 +1045,18 @@ function saveSheet(text) {
   }
   const steps = textToSteps(text, new Set(deck.goals.map((g) => g.id)))
     .map((step) => step.map((item) => pool.get(itemSignature(item))?.shift() ?? item));
+  // Een doel vink je maar één keer af: een doel dat al op een ander vel (of eerder op dit vel)
+  // wordt afgevinkt, valt hier weg, met een melding. Dezelfde regel als bij het inlezen van de JSON.
+  const seen = new Map();
+  dropRepeatedChecks(flat.filter((o) => o !== f).map((o) => ({ title: o.title, steps: o.steps.map((step) => [...step]) })), seen);
+  const dropped = dropRepeatedChecks([{ title: f.title, steps }], seen);
   f.steps.splice(0, f.steps.length, ...steps); // dezelfde lijst als in deck
   pos = { sheet: i, step: f.steps.length };
   render(null);
+  if (dropped.length) {
+    const once = [...new Map(dropped.map((d) => [d.goal, d])).values()]; // elk doel één keer noemen
+    showNotice(once.map((d) => `${d.goal} wordt al afgevinkt op „${d.first}”`).join('; ') + '. Een doel vink je maar één keer af, dus hier niet nog eens.');
+  }
 }
 
 /**

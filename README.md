@@ -84,7 +84,7 @@ In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=...
 }
 ```
 
-- `title`: titel van de presentatie. Staat op het startscherm onder "WELKOM" en in het browsertabblad (beide pas na het ontsleutelen).
+- `title` (**verplicht**): titel van de presentatie. Zonder (of leeg) is een **fout**. Staat op het startscherm onder "WELKOM" en in het browsertabblad (beide pas na het ontsleutelen).
 - `agreements`: werkafspraken. Standaard verborgen; met de knop **Werkafspraken** in de bedieningsbalk (of de toets W) verschijnen ze over het hele whiteboard heen. Zonder `agreements` is er geen knop.
 - `goals`: de doelen van de presentatie, **hooguit 4**. Ze staan de hele presentatie bovenaan het whiteboard, elk met een leeg aankruisvakje. Elk doel heeft een `id` en een `text`. De ids liggen vast: `doel1`, `doel2`, `doel3` en `doel4`, op volgorde en zonder gaten (twee doelen zijn dus altijd `doel1` en `doel2`); hoofdletters maken niet uit. De id bepaalt het vak in de strook: `doel1` linksboven, `doel2` rechtsboven, `doel3` linksonder, `doel4` rechtsonder. De tekst is hooguit **100 tekens**: dan passen vier doelen nog, met kleinere letters, leesbaar op een laptopscherm van 1920×1080. Zonder `goals` is er geen doelenstrook en krijgt het kanbanbord die ruimte.
 - `topics`: de onderwerpen, in volgorde. Elk onderwerp is één geeltje. **Hooguit 6**: gemeten op 1920×1080 passen er dan 2 geeltjes naast elkaar met letters van zo’n 24–26px op het scherm; vanaf 7 worden het er 3 per rij en de letters 14px of kleiner. Meer geeft een waarschuwing (geen fout).
@@ -106,12 +106,13 @@ Eigenschappen van een `keyword` (allemaal optioneel):
 - `color`: markerkleur: `blue`, `red`, `black`, `green`, `yellow`, `orange`, `purple` of `pink`. Zonder `color` is het blauw. Alle kleuren zijn donker genoeg om goed leesbaar te zijn op het papier (contrast minstens 4,5:1); geel en oranje zien er daarom uit als okergele en donkeroranje marker.
 - `indent`: `0`, `1` of `2`: hoe ver het steekwoord inspringt. Het opsommingsteken verschilt per niveau: rode stip, kleinere rode stip, rood streepje.
 - `numbered`: `true` voor een nummer in plaats van het opsommingsteken. De nummers telt de presentatie zelf: opeenvolgende genummerde steekwoorden op hetzelfde niveau tellen door (ook over klikken heen); een steekwoord zonder nummer op dat niveau, of een dat minder ver inspringt, laat de telling daarna weer bij 1 beginnen. Dieper ingesprongen steekwoorden onderbreken de telling niet.
-- `gap`: `"space"` voor witruimte of `"line"` voor een dikke blauwe lijn **boven** dit steekwoord.
+- `gap`: `"space"` voor witruimte of `"line"` voor een dikke blauwe lijn **boven** dit steekwoord. Niet op het eerste steekwoord van een vel (daar staat niets boven): dat is een **fout**, en de presentatie negeert de `gap` dan.
 
 Regels:
 
 - Een step heeft hooguit één `question`. De vraag staat er zolang die klik de laatste is, en verdwijnt bij de volgende klik weer.
-- Een afgevinkt doel blijft afgevinkt, ook op latere vellen en onderwerpen. Blader je terug tot vóór de klik met de `check`, dan is het vakje weer leeg. De controle op doelen is streng: een andere `id` dan `doel1`–`doel4` (of niet op volgorde), een lege of te lange tekst, een vijfde doel en een `check` met een `goal` die geen bestaand doel is, zijn allemaal **fouten**. `tools/encrypt.js` weigert dan te versleutelen; de presentatie slaat het over en meldt het in de console.
+- Een afgevinkt doel blijft afgevinkt, ook op latere vellen en onderwerpen. Blader je terug tot vóór de klik met de `check`, dan is het vakje weer leeg. De controle op doelen is streng: een andere `id` dan `doel1`–`doel4` (of niet op volgorde), een lege of te lange tekst, een vijfde doel, een `check` met een `goal` die geen bestaand doel is, en een doel dat al eerder wordt afgevinkt (in de volgorde van de presentatie; een doel vink je maar één keer af), zijn allemaal **fouten**. `tools/encrypt.js` weigert dan te versleutelen; de presentatie slaat het over en meldt het in de console.
+- Elke tekst is één regel: een regeleinde in een tekst (ook in titels, namen van geeltjes, doelen en werkafspraken) wordt bij het inlezen één spatie, met een melding. `tools/encrypt.js` versleutelt de verbeterde tekst.
 - Per klik klinkt elk geluid hooguit één keer (één belletje, ook bij meerdere tips).
 - Een onbekend type, een item zonder tekst, een lege step of een ongeldige eigenschap geeft een melding en wordt overgeslagen of krijgt de standaardwaarde. `tools/encrypt.js` meldt dit al bij het versleutelen, en de motor geeft een waarschuwing in de console. Beide gebruiken dezelfde controle uit `js/content.js`.
 - Een vel zonder titel, of iets wat geen vel is, is een **fout**: `tools/encrypt.js` weigert dan te versleutelen en noemt welk vel het is. Met `?plain` toont de presentatie zo'n vel wel (met een lege titel en een foutmelding in de console), zodat je kunt doorwerken.
@@ -175,7 +176,7 @@ Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daa
 | `->`, `-->` of `→` | nieuwe klik |
 | `? tekst` | vraag op het whiteboard; een tweede vraag in dezelfde klik begint vanzelf een nieuwe klik |
 | `! tekst` | tip op de linker flip-over |
-| `+doel1` t/m `+doel4` | vinkt dat doel af (hoofdletters maken niet uit); een doel dat er niet is, blijft gewone tekst |
+| `+doel1` t/m `+doel4` | vinkt dat doel af (hoofdletters maken niet uit); een doel dat er niet is, blijft gewone tekst. Een doel vink je maar één keer af: wordt het al op een ander vel (of eerder op dit vel) afgevinkt, dan valt het bij opslaan weg, met een melding waar het al staat |
 | elke andere regel | steekwoord met bullet |
 
 - Wat na `*`, `-`, `•` of een nummer staat is gewone tekst: `* ? geen vraag` is een steekwoord. Een onbekende kleur of doel-id blijft gewoon tekst; een geldig kleurlabel wordt overal weggehaald (ook uit een vraag of tip), dus `[rood]` kun je niet letterlijk als tekst gebruiken.
