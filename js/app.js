@@ -6,6 +6,7 @@
 
 import { decryptText, WrongPasswordError } from './crypto-core.js';
 import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS } from './content.js';
+import { stepsToText, textToSteps } from './sheet-text.js';
 
 const STAGE_W = 1600;
 const STAGE_H = 900;
@@ -37,8 +38,8 @@ const els = {
   addTip: $('#add-tip'),
   tipForm: $('#tip-form'),
   tipInput: $('#tip-input'),
-  addBtn: $('#btn-add'),
-  addMenu: $('#add-menu'),
+  editBtn: $('#btn-edit'),
+  notice: $('#edit-notice'),
   question: $('#wb-question'),
   questionText: $('#wb-question-text'),
   progress: $('#progress'),
@@ -63,6 +64,7 @@ let stickies = [];        // knop-elementen, index = onderwerp
 let stickyFontPx = 22;    // maximale lettergrootte op een geeltje, gezet door buildStickies()
 let scale = 1;
 let generation = 0;       // verhoogd bij elke navigatie; oude animatiestappen stoppen dan
+let sheetEditor = null;   // het tekstvak van een vel in de bewerkmodus, zolang het open is (zie openSheetEditor)
 // Wijzigingen (alleen in het geheugen) gaan direct in het model: tips die tijdens de presentatie
 // worden toegevoegd (type tip, user: true), en in de bewerkmodus bewerken, toevoegen,
 // verwijderen en klikken splitsen of samenvoegen. Voor de export en de telling op het
@@ -76,7 +78,9 @@ const editMode = new URLSearchParams(location.search).has('edit');
 /* ------------------------------------------------------------------ */
 
 const isLocalhost = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
-const usePlain = isLocalhost && new URLSearchParams(location.search).has('plain');
+// ?plain en ?edit gaan niet samen: met allebei in de adresbalk geldt de gewone bewerkmodus
+// (versleutelde inhoud, met wachtwoord).
+const usePlain = isLocalhost && new URLSearchParams(location.search).has('plain') && !editMode;
 
 async function loadContent(password) {
   if (usePlain) {
@@ -344,6 +348,7 @@ function prev() {
 }
 
 function goTo(target) {
+  if (sheetEditor) return; // eerst opslaan of annuleren
   if (target.sheet === pos.sheet && target.step === pos.step) return;
   const previous = pos;
   pos = target;
@@ -465,9 +470,8 @@ function updateButtons() {
   b.textContent = label ? label + ' ›' : '›';
   b.title = isStart(pos) ? 'Presentatie starten (→)' : label ? 'Naar het afsluitscherm (→)' : 'Volgende (→)';
   els.prev.disabled = isStart(pos);
-  els.addBtn.disabled = !isContent(pos); // niets toevoegen op het start- of afsluitscherm
+  els.editBtn.disabled = !isContent(pos) || sheetEditor !== null; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos);
-  if (!isContent(pos)) closeAddMenu();
 }
 
 /**
@@ -519,7 +523,7 @@ function createListItem(it) {
   return li;
 }
 
-/** Zet de eigenschappen van een keyword op een regel (ook live tijdens het bewerken). */
+/** Zet de eigenschappen van een keyword op een regel. */
 function applyKeywordLook(li, it) {
   const set = (name, value) => { if (value) li.dataset[name] = value; else delete li.dataset[name]; };
   set('color', it.color);
@@ -811,298 +815,184 @@ els.tipInput.addEventListener('keydown', (e) => {
 els.tipInput.addEventListener('blur', () => { if (!els.tipForm.hidden) submitTip(); });
 
 /* ---------- Bewerken (?edit) ---------- */
-// Klik op een tip, steekwoord of vraag: er verschijnt een tekstvak met de focus erop, met de
-// Verwijder-knop ernaast en de instellingen van dat item eronder. Enter of wegklikken slaat de
-// tekst op, Esc annuleert hem; leeg opslaan geldt als annuleren. Instellingen (kleur,
-// inspringen, genummerd, ruimte erboven, nieuwe klik) gelden en worden bewaard zodra je ze
-// kiest. Alles gaat direct in het model; de export op het afsluitscherm neemt het over.
+// Klik op de rechter flip-over (of de knop "Vel bewerken", of E): alle klikken van het vel
+// verschijnen als tekst in één tekstvak ter grootte van het vel (notatie: zie sheet-text.js).
+// Opslaan (of Ctrl+Enter) verwerkt alles in één keer, daarna is het hele vel in beeld; Annuleren
+// (of Esc) laat het vel zoals het was. De titel van het vel bewerk je los: klik erop (of Tab
+// ernaartoe en Enter) en hij wordt een invoerveld. Tips bewerk je via het tekstvak; een klik op
+// een tip links zegt op welk vel hij staat. Alles gaat in het model; de export op het
+// afsluitscherm neemt het over.
 
-const fresh = new Set(); // items die net via "Toevoegen" zijn gemaakt en nog niet zijn ingevuld
+// sheetEditor (bovenaan gedeclareerd): { box, input, opener } zolang het tekstvak open is
 
-const TRASH_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.6 6.5v4.5M9.4 6.5v4.5"/></svg>';
-const LABELS = { keyword: 'Steekwoord', tip: 'Tip', question: 'Vraag' };
-
-/** Waar staat dit item in het model? { i: vel in flat, s: step, k: plek in de step } */
-function locate(item) {
-  for (let i = 0; i < flat.length; i++) {
-    const steps = flat[i].steps;
-    for (let s = 0; s < steps.length; s++) {
-      const k = steps[s].indexOf(item);
-      if (k >= 0) return { i, s, k };
-    }
-  }
-  return null;
-}
-
-/** Zet een eigenschap op een item; undefined betekent: weglaten uit de JSON (de standaard). */
-function setProp(item, name, value) {
-  if (value === undefined) delete item[name]; else item[name] = value;
-  dirtySheets.add(locate(item).i);
-}
-
-/** Alles wat bewerkt kan zijn opnieuw tekenen, zonder animatie. */
-function rerenderContent() {
-  renderTips(false);
-  setList(els.keywordList, keywordsAt(pos), false);
-  fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20);
-  showQuestion(questionAt(pos), false);
-}
-
-/** De regel (of de vraagtekst) waarin een item nu getoond wordt, of null. */
-function hostOf(item) {
-  if (item.type === 'question') return questionItemAt(pos) === item ? els.questionText : null;
-  const isKeyword = item.type === 'keyword';
-  const items = isKeyword ? keywordsAt(pos) : tipsAt(pos);
-  const index = items.findIndex((it) => it.ref === item);
-  return index < 0 ? null : (isKeyword ? els.keywordList : els.tipsList).children[index];
-}
-
-/**
- * Opent het tekstvak voor een item, met de Verwijder-knop ernaast en de instellingen eronder.
- * focus: wat de focus krijgt ('text', of de naam van een instelling, bijv. na een nieuwe klik).
- */
-function editItem(item, focus = 'text') {
-  const host = hostOf(item);
-  if (!host || host.querySelector('.edit-box')) return;
-  const label = LABELS[item.type];
-  let done = false;
-  // Sluit het vak: regel leegmaken en de sleutel weghalen, zodat setList hem bij het opnieuw
-  // tekenen zeker opnieuw opbouwt (anders blijft dit vak staan als de tekst niet veranderde).
-  const close = () => {
-    done = true;
-    host.replaceChildren();
-    delete host.dataset.key;
-  };
-
-  // Tekstvak: groeit mee en breekt af zoals de regel zelf. Enter slaat op.
-  const input = document.createElement('textarea');
-  input.rows = 1;
-  input.className = 'inline-edit';
-  input.value = item.text;
-  input.setAttribute('aria-label', label + ' bewerken');
-  const autosize = () => { input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; };
-  input.addEventListener('input', autosize);
-  const typed = () => input.value.replace(/\s+/g, ' ').trim(); // geplakte regeleinden worden spaties
-
-  // Verwijder-knop direct naast (en in de DOM direct na) het tekstvak.
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'edit-delete';
-  del.innerHTML = TRASH_ICON;
-  del.title = 'Verwijderen';
-  del.setAttribute('aria-label', label + ' verwijderen');
-  del.addEventListener('mousedown', (e) => e.preventDefault()); // anders slaat "wegklikken" eerst op
-  del.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (done) return;
-    close();
-    deleteItem(item);
-  });
-  const row = document.createElement('div');
-  row.className = 'edit-row';
-  row.append(input, del);
-
-  // Instellingen: gelden direct en blijven bewaard, ook als de tekst daarna wordt geannuleerd.
-  const opts = document.createElement('div');
-  opts.className = 'edit-opts';
-  const controls = {};
-  const addSelect = (name, aria, options, value, onChange) => {
-    const sel = document.createElement('select');
-    sel.setAttribute('aria-label', aria);
-    for (const [v, text] of options) sel.add(new Option(text, v));
-    sel.value = value;
-    sel.addEventListener('change', () => onChange(sel.value));
-    opts.append(sel);
-    controls[name] = sel;
-  };
-  const addCheck = (name, text, checked, onChange, why = '') => {
-    const lab = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = checked;
-    cb.disabled = Boolean(why);
-    if (why) lab.title = why;
-    cb.addEventListener('change', () => onChange(cb.checked));
-    lab.append(cb, ' ' + text);
-    opts.append(lab);
-    controls[name] = cb;
-  };
-
-  if (item.type === 'keyword') {
-    // Live bijwerken, zonder het tekstvak te sluiten.
-    const refresh = () => {
-      applyKeywordLook(host, keywordsAt(pos).find((it) => it.ref === item));
-      renumber(els.keywordList);
-      fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20);
-    };
-    addSelect('color', 'Kleur', [['default', 'default'], ...[...KEYWORD_COLORS].map((c) => [c, c])],
-      colorOf(item) ?? 'default', (v) => { setProp(item, 'color', v === 'default' ? undefined : v); refresh(); });
-    addSelect('indent', 'Inspringen', KEYWORD_INDENTS.map((n) => [String(n), 'inspring ' + n]),
-      String(indentOf(item)), (v) => { setProp(item, 'indent', v === '0' ? undefined : Number(v)); refresh(); });
-    addCheck('numbered', 'genummerd', item.numbered === true,
-      (on) => { setProp(item, 'numbered', on ? true : undefined); refresh(); });
-    addSelect('gap', 'Ruimte erboven', [['', 'geen ruimte'], ['space', 'witruimte'], ['line', 'lijn']],
-      gapOf(item) ?? '', (v) => { setProp(item, 'gap', v || undefined); refresh(); });
-  }
-
-  if (item.type === 'tip') {
-    // user: tip die tijdens de presentatie is toegevoegd (rood plusje in plaats van een ster).
-    addCheck('user', 'tijdens presentatie', item.user === true, (on) => {
-      setProp(item, 'user', on ? true : undefined);
-      host.classList.toggle('user', on); // direct zichtbaar
-    });
-    controls.user.parentElement.title = 'Toegevoegd tijdens de presentatie ("user": true): rood plusje in plaats van een ster';
-  }
-
-  // Nieuwe klik: aangevinkt = dit item begint een eigen klik. Aanvinken splitst de klik vóór dit
-  // item, uitvinken voegt hem samen met de vorige. Het eerste item van een vel begint altijd een
-  // klik, en samenvoegen kan niet als beide klikken een vraag hebben.
-  const { i, s, k } = locate(item);
-  const steps = flat[i].steps;
-  const hasQuestion = (step) => step.some((it) => it.type === 'question');
-  const why = k === 0 && s === 0 ? 'Het eerste item van een vel begint altijd een klik'
-    : k === 0 && hasQuestion(steps[s - 1]) && hasQuestion(steps[s]) ? 'Samenvoegen kan niet: beide klikken hebben een vraag'
-    : '';
-  addCheck('newClick', 'nieuwe klik', k === 0, (on) => {
-    if (done) return;
-    const value = typed();
-    close();
-    if (value) { item.text = value; fresh.delete(item); }
-    setNewClick(item, on);
-    render(null);
-    editItem(item, 'newClick'); // hetzelfde item blijft open, nu op zijn nieuwe plek
-  }, why);
-
+function openSheetEditor() {
+  if (!editMode || sheetEditor || !isContent(pos)) return;
+  finishAllAnimations();
+  const f = flat[pos.sheet];
   const box = document.createElement('div');
-  box.className = 'edit-box';
-  box.append(row, opts);
+  box.className = 'sheet-editor';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Vel bewerken: ' + f.title);
+  box.innerHTML = `
+    <textarea class="sheet-editor-text" aria-label="Klikken van het vel als tekst" aria-describedby="sheet-editor-help"></textarea>
+    <p class="sheet-editor-help" id="sheet-editor-help"></p>
+    <div class="sheet-editor-buttons">
+      <button type="button" data-action="cancel" title="Wijzigingen weggooien (Esc)">Annuleren</button>
+      <button type="button" data-action="save" class="primary" title="Opslaan (Ctrl+Enter)">Opslaan</button>
+    </div>`;
+  // Zo kort mogelijk, en algemeen: niets uit de inhoud van deze presentatie.
+  const code = (t) => `<code>${t}</code>`;
+  box.querySelector('.sheet-editor-help').innerHTML = [
+    `${code('*')} ${code('-')} ${code('1.')} steekwoord, 2/4 spaties inspringen`,
+    `lege regel ruimte, ${code('---')} lijn, ${code('-&gt;')} klik`,
+    `${code('?')} vraag, ${code('!')} tip, ${code('+id')} doel afvinken`,
+    `${code('[kleur]')} ${[...KEYWORD_COLORS].join(' ')}`,
+  ].join('<br>');
+  const input = box.querySelector('textarea');
+  input.value = stepsToText(f.steps);
+  sheetEditor = { box, input, opener: document.activeElement };
 
-  const finish = (keep) => {
-    if (done) return;
-    const value = typed();
-    close();
-    if (keep && value) {
-      if (value !== item.text) { item.text = value; dirtySheets.add(locate(item).i); }
-      fresh.delete(item);
-    } else if (fresh.has(item)) {
-      return deleteItem(item); // nieuw en nooit ingevuld: weer weg
-    }
-    rerenderContent();
-  };
+  box.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (action) closeSheetEditor(action === 'save');
+  });
   box.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.target === input) { e.preventDefault(); finish(true); }
-    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-  });
-  // Wegklikken slaat op; naar een instelling gaan (binnen het vak) niet.
-  box.addEventListener('focusout', (e) => { if (!box.contains(e.relatedTarget)) finish(true); });
-
-  host.replaceChildren(box);
-  autosize();
-  (controls[focus] ?? input).focus({ preventScroll: true });
-}
-
-/**
- * Verwijdert een item. Wordt zijn klik daardoor leeg, dan verdwijnt de hele klik; staat die
- * vóór de huidige positie, dan schuift de positie mee terug. Zonder animatie of geluid.
- */
-function deleteItem(item) {
-  const { i, s, k } = locate(item);
-  const steps = flat[i].steps;
-  steps[s].splice(k, 1);
-  if (steps[s].length === 0) {
-    steps.splice(s, 1);
-    if (i === pos.sheet && s < pos.step) pos = { sheet: i, step: pos.step - 1 };
-  }
-  fresh.delete(item);
-  dirtySheets.add(i);
-  render(null);
-}
-
-/** Splitst de klik vóór dit item (on) of voegt zijn klik samen met de vorige (!on). Het beeld blijft gelijk. */
-function setNewClick(item, on) {
-  const { i, s, k } = locate(item);
-  const steps = flat[i].steps;
-  if (on && k > 0) {
-    steps.splice(s + 1, 0, steps[s].splice(k));
-    if (i === pos.sheet && s < pos.step) pos = { sheet: i, step: pos.step + 1 };
-  } else if (!on && k === 0 && s > 0) {
-    steps[s - 1].push(...steps.splice(s, 1)[0]);
-    if (i === pos.sheet && s < pos.step) pos = { sheet: i, step: pos.step - 1 };
-  }
-  dirtySheets.add(i);
-}
-
-/* ---------- Toevoegen (?edit) ---------- */
-// "Toevoegen" in de bedieningsbalk opent een menu met de soorten items. Het gekozen item komt
-// achteraan de huidige klik (of, als er op dit vel nog niets geklikt is, in een nieuwe eerste
-// klik) en het tekstvak gaat open. Met "nieuwe klik" maak je er een eigen klik van. Annuleren of
-// leeg laten verwijdert het weer.
-
-function openAddMenu() {
-  if (!isContent(pos)) return;
-  // Een klik heeft hooguit één vraag.
-  const question = els.addMenu.querySelector('[data-type="question"]');
-  question.disabled = questionItemAt(pos) !== null;
-  question.title = question.disabled ? 'Deze klik heeft al een vraag' : '';
-  els.addMenu.hidden = false;
-  els.addBtn.setAttribute('aria-expanded', 'true');
-  els.controls.classList.add('menu-open');
-  els.addMenu.querySelector('button:not(:disabled)').focus();
-}
-
-function closeAddMenu() {
-  els.addMenu.hidden = true;
-  els.addBtn.setAttribute('aria-expanded', 'false');
-  els.controls.classList.remove('menu-open');
-}
-
-function addItem(type) {
-  closeAddMenu();
-  if (!isContent(pos)) return;
-  const item = { type, text: '' };
-  const steps = flat[pos.sheet].steps;
-  if (pos.step === 0) { steps.unshift([item]); pos = { sheet: pos.sheet, step: 1 }; }
-  else steps[pos.step - 1].push(item);
-  fresh.add(item);
-  dirtySheets.add(pos.sheet);
-  render(null);
-  editItem(item);
-}
-
-if (editMode) {
-  els.addBtn.hidden = false;
-  els.addBtn.addEventListener('click', () => (els.addMenu.hidden ? openAddMenu() : closeAddMenu()));
-  els.addMenu.addEventListener('click', (e) => {
-    const choice = e.target.closest('[data-type]');
-    if (choice && !choice.disabled) addItem(choice.dataset.type);
-  });
-  els.addMenu.addEventListener('keydown', (e) => {
-    const items = [...els.addMenu.querySelectorAll('button:not(:disabled)')];
-    const i = items.indexOf(document.activeElement);
-    if (e.key === 'Escape') { closeAddMenu(); els.addBtn.blur(); }
-    else if (e.key === 'ArrowDown') items[(i + 1) % items.length].focus();
-    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length].focus();
+    if (e.key === 'Escape') closeSheetEditor(false);
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeSheetEditor(true);
     else return;
     e.preventDefault();
-    e.stopPropagation(); // niet ook door de presentatie laten bladeren
-  });
-  // Ergens anders klikken sluit het menu.
-  document.addEventListener('click', (e) => {
-    if (!els.addMenu.hidden && !els.addMenu.contains(e.target) && e.target !== els.addBtn) closeAddMenu();
+    e.stopPropagation();
   });
 
+  els.keywordPad.append(box);
+  updateButtons();
+  input.focus({ preventScroll: true });
+  input.setSelectionRange(0, 0);
+  input.scrollTop = 0;
+}
+
+function closeSheetEditor(save) {
+  if (!sheetEditor) return;
+  const { box, input, opener } = sheetEditor;
+  sheetEditor = null;
+  box.remove();
+  if (save) saveSheet(input.value);
+  updateButtons();
+  if (opener?.isConnected && opener !== document.body) opener.focus({ preventScroll: true });
+}
+
+/** Sleutel om items te vergelijken, ongeacht de volgorde van de velden. */
+const itemSignature = (item) => JSON.stringify(Object.keys(item).sort().map((k) => [k, item[k]]));
+
+/**
+ * Verwerkt de tekst in het huidige vel. Items die precies gelijk bleven, houden hun object; dan
+ * telt het afsluitscherm ze niet als verwijderd en opnieuw toegevoegd. Tips worden altijd
+ * gewone tips (zonder "user"): in de bewerkmodus presenteren we niet. Daarna het hele vel in beeld.
+ */
+function saveSheet(text) {
+  const i = pos.sheet;
+  const f = flat[i];
+  const pool = new Map();
+  for (const item of f.steps.flat()) {
+    const key = itemSignature(item);
+    pool.set(key, [...(pool.get(key) ?? []), item]);
+  }
+  const steps = textToSteps(text, new Set(deck.goals.map((g) => g.id)))
+    .map((step) => step.map((item) => pool.get(itemSignature(item))?.shift() ?? item));
+  const changed = steps.length !== f.steps.length
+    || steps.some((step, s) => step.length !== f.steps[s].length || step.some((item, k) => item !== f.steps[s][k]));
+  if (changed) {
+    f.steps.splice(0, f.steps.length, ...steps); // dezelfde lijst als in deck
+    dirtySheets.add(i);
+  }
+  pos = { sheet: i, step: f.steps.length };
+  render(null);
+}
+
+/**
+ * De titel van het huidige vel bewerken, op zijn plek. Enter of wegklikken slaat op, Esc
+ * annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren.
+ */
+function editTitle() {
+  if (!editMode || sheetEditor || !isContent(pos) || els.keywordTitle.hidden) return;
+  finishAllAnimations();
+  const i = pos.sheet;
+  const f = flat[i];
+  const heading = els.keywordTitle;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'title-edit';
+  input.value = f.title;
+  input.setAttribute('aria-label', 'Titel van het vel');
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const value = input.value.replace(/\s+/g, ' ').trim();
+    const refocus = document.activeElement === input;
+    input.remove();
+    heading.hidden = false;
+    if (save && value && value !== f.title) {
+      f.title = value;
+      deck.topics[f.topic].sheets[f.sheet].title = value;
+      dirtySheets.add(i);
+      heading.textContent = titleAt(pos);
+      fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20); // de titel kan langer of korter zijn
+    }
+    if (refocus) heading.focus({ preventScroll: true });
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') finish(true);
+    else if (e.key === 'Escape') finish(false);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (e) => e.stopPropagation()); // niet ook het tekstvak van het vel openen
+  heading.hidden = true;
+  heading.after(input);
+  input.focus({ preventScroll: true });
+  input.select();
+}
+
+/** Korte melding boven de bedieningsbalk (ook voorgelezen); verdwijnt na een paar seconden. */
+let noticeTimer;
+function showNotice(text) {
+  clearTimeout(noticeTimer);
+  els.notice.textContent = '';
+  setTimeout(() => { els.notice.textContent = text; }, 50); // ook dezelfde tekst opnieuw voorlezen
+  noticeTimer = setTimeout(() => { els.notice.textContent = ''; }, 6000);
+}
+
+/** Het vel (index in flat) waarop dit item staat, of -1. */
+const sheetOf = (item) => flat.findIndex((f) => f.steps.some((step) => step.includes(item)));
+
+if (editMode) {
   document.documentElement.classList.add('edit-mode');
   $('#edit-badge').hidden = false;
-  const onLine = (ul, itemsAt) => (e) => {
+  els.editBtn.hidden = false;
+  els.editBtn.addEventListener('click', () => openSheetEditor());
+  els.keywordSheet.addEventListener('click', () => openSheetEditor());
+  // De titel: klikken of (met het toetsenbord) Enter bewerkt alleen de titel.
+  const heading = els.keywordTitle;
+  heading.tabIndex = 0;
+  heading.title = 'Titel bewerken (klik of Enter)';
+  heading.addEventListener('click', (e) => { e.stopPropagation(); editTitle(); });
+  heading.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    editTitle();
+  });
+  els.tipsList.addEventListener('click', (e) => {
     const li = e.target.closest('li');
-    const line = li && itemsAt(pos)[[...ul.children].indexOf(li)];
-    if (line) editItem(line.ref);
-  };
-  els.tipsList.addEventListener('click', onLine(els.tipsList, tipsAt));
-  els.keywordList.addEventListener('click', onLine(els.keywordList, keywordsAt));
-  els.questionText.addEventListener('click', () => {
-    const question = questionItemAt(pos);
-    if (question) editItem(question);
+    const tip = li && tipsAt(pos)[[...els.tipsList.children].indexOf(li)];
+    if (!tip) return;
+    const i = sheetOf(tip.ref);
+    showNotice(i === pos.sheet
+      ? `Deze tip bewerk je via dit vel, „${flat[i].title}”: klik op de rechter flip-over of druk op E.`
+      : `Deze tip bewerk je via het vel „${flat[i].title}”. Ga naar dat vel en klik op de rechter flip-over of druk op E.`);
   });
 }
 
@@ -1479,7 +1369,7 @@ window.addEventListener('resize', () => { if (deck) fitStage(); });
 document.addEventListener('keydown', (e) => {
   if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.target.closest?.('input, select, textarea')) return; // tijdens typen of kiezen niet navigeren
-  if (!els.addMenu.hidden) return; // het toevoegmenu regelt zijn eigen toetsen
+  if (sheetEditor) return; // het tekstvak van het vel regelt zijn eigen toetsen
   if (e.key === ' ' && e.target === els.pdf) return; // spatie bedient de PDF-knop, niet "volgende"
   const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Spacebar'];
   const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'];
@@ -1492,10 +1382,11 @@ document.addEventListener('keydown', (e) => {
   // Home/End: eerste en laatste inhoud, niet het start- of afsluitscherm
   else if (e.key === 'Home') { e.preventDefault(); goTo(firstContent()); }
   else if (e.key === 'End') { e.preventDefault(); goTo(lastContent()); }
-  // Plus (Shift+= of het numerieke toetsenblok): tip toevoegen. preventDefault voorkomt
-  // dat de '+' zelf in het zojuist gefocuste tekstveld belandt.
-  // In de bewerkmodus opent de plustoets het toevoegmenu in plaats van het tipformulier.
-  else if (e.key === '+' && isContent(pos)) { e.preventDefault(); if (editMode) openAddMenu(); else openTipForm(); }
+  // Plus (Shift+= of het numerieke toetsenblok): tip toevoegen (niet in de bewerkmodus; daar
+  // gaan tips via het tekstvak van het vel). preventDefault voorkomt dat de '+' zelf in het
+  // zojuist gefocuste tekstveld belandt; bij E net zo.
+  else if (e.key === '+' && isContent(pos) && !editMode) { e.preventDefault(); openTipForm(); }
+  else if ((e.key === 'e' || e.key === 'E') && editMode && isContent(pos)) { e.preventDefault(); openSheetEditor(); }
 });
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
@@ -1577,6 +1468,8 @@ function updateDownload() {
   if (added) parts.push(count(added, 'toegevoegd'));
   if (edited) parts.push(count(edited, 'bewerkt'));
   if (removed) parts.push(count(removed, 'verwijderd'));
+  const titles = flat.filter((f) => f.title !== rawContent.topics?.[f.topic]?.sheets?.[f.sheet]?.title).length;
+  if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
   els.endNote.textContent = `Je hebt ${list}. `
     + 'Dit bestand is onversleuteld: zet het in de projectmap, versleutel het opnieuw en verwijder de download.';
@@ -1597,6 +1490,7 @@ function contentWithChanges() {
     if (!Array.isArray(topic.sheets)) topic.sheets = [];
     let sheet = topic.sheets[f.sheet];
     if (!sheet || typeof sheet !== 'object' || Array.isArray(sheet)) sheet = topic.sheets[f.sheet] = { title: f.title };
+    sheet.title = f.title;
     sheet.steps = f.steps.map((step) => step.map((item) => structuredClone(item)));
   }
   return copy;

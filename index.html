@@ -122,15 +122,14 @@
       <button id="btn-full" title="Volledig scherm (F)">⛶</button>
       <!-- Alleen met ?edit in de adresbalk -->
       <span id="edit-badge" class="edit-badge" hidden>✎ Bewerken</span>
-      <button id="btn-add" class="labeled" hidden aria-haspopup="menu" aria-expanded="false"
-              aria-controls="add-menu" title="Item toevoegen aan deze klik (+)">＋ Toevoegen</button>
-      <div id="add-menu" class="add-menu" role="menu" aria-label="Toevoegen" hidden>
-        <button type="button" role="menuitem" data-type="tip">Tip <small>links, op de flip-over</small></button>
-        <button type="button" role="menuitem" data-type="keyword">Steekwoord <small>rechts, op het vel</small></button>
-        <button type="button" role="menuitem" data-type="question">Vraag <small>op het whiteboard</small></button>
-      </div>
+      <button id="btn-edit" class="labeled" hidden aria-keyshortcuts="E"
+              title="Dit vel bewerken als tekst (E)">Vel bewerken</button>
     </nav>
   </div>
+
+  <!-- Korte meldingen in de bewerkmodus (bijv. waar je een tip bewerkt). Altijd aanwezig, zodat
+       schermlezers de tekst voorlezen zodra die verschijnt; leeg is hij onzichtbaar. -->
+  <div id="edit-notice" class="edit-notice" role="status"></div>
 
   <!-- Afdrukversie van de vellen (gevuld door app.js vlak voor het afdrukken). Op het scherm
        onzichtbaar maar wel opgemaakt, zodat de lettergrootte gemeten kan worden. -->

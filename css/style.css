@@ -250,82 +250,67 @@ body {
 .tip-form input::placeholder { color: rgba(38,38,38,.35); }
 
 /* ---------- Bewerken (?edit) ---------- */
-/* Tips, steekwoorden en de vraag zijn aanklikbaar; bij aanwijzen een gestippelde rand */
-.edit-mode .tips-list li,
-.edit-mode .keyword-list li,
-.edit-mode .q-text { cursor: text; }
-.edit-mode .q-text { pointer-events: auto; } /* het vraagvlak zelf laat klikken door */
-.edit-mode .tips-list li:hover,
-.edit-mode .keyword-list li:hover,
-.edit-mode .q-text:hover { outline: 2px dashed rgba(31,63,143,.35); outline-offset: 3px; border-radius: 4px; }
-
-/* Het tekstvak neemt het handschrift en de kleur van de regel over */
-.edit-box { display: flex; flex-direction: column; gap: 6px; }
-.inline-edit {
-  width: 100%; min-width: 0;
-  padding: 0 2px; margin: 0;
-  border: 0; border-bottom: 2.5px dashed currentColor; border-radius: 0;
-  background: rgba(255,255,255,.9);
-  font: inherit; color: inherit; line-height: inherit;
+/* De rechter flip-over is aanklikbaar: dan opent het tekstvak van het hele vel */
+.edit-mode #keyword-sheet { cursor: text; }
+.edit-mode #keyword-sheet:hover { box-shadow: inset 0 0 0 3px rgba(31,63,143,.3); }
+/* De titel apart: klikken (of Enter) maakt er een invoerveld van */
+.edit-mode #keyword-title:hover { background: rgba(31,63,143,.07); border-radius: 3px 3px 0 0; }
+.edit-mode #keyword-title:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 3px; }
+.title-edit {
+  display: block; width: 100%;
+  margin: 0 0 18px; padding: 0 2px 8px;
+  border: 0; border-bottom: 4px dashed var(--marker-blue); border-radius: 0;
+  background: #fffbe0;
+  font-family: var(--marker); font-size: 34px; line-height: 1.15;
+  color: var(--marker-blue);
 }
-.inline-edit:focus { outline: none; background: #fffbe0; }
-.q-text .inline-edit { text-align: inherit; }
-/* Tekstvak met de Verwijder-knop ernaast */
-.edit-row { display: flex; align-items: flex-start; gap: 8px; }
-/* Op de flip-overs mag het vak in de rechter papierrand doorlopen, zodat de tekst ondanks de
-   knop even breed blijft als op het vel en woorden niet midden in breken */
-.sheet-list .edit-box { margin-right: -22px; }
-.edit-row .inline-edit { flex: 1 1 auto; width: auto; }
-textarea.inline-edit { display: block; resize: none; overflow: hidden; }
-.edit-delete { margin-top: 6px; } /* ongeveer midden op de eerste regel */
-.edit-delete {
-  flex: 0 0 auto;
-  display: grid; place-items: center;
-  width: 30px; height: 30px; padding: 0;
-  border: 1.5px solid var(--ink-red); border-radius: 5px;
-  background: #fff; color: var(--ink-red);
-  cursor: pointer;
-}
-.edit-delete:hover { background: var(--ink-red); color: #fff; }
-.edit-delete:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 2px; }
-/* Instellingen onder het tekstvak (kleur, inspringen, genummerd, ruimte erboven, nieuwe klik) */
-.edit-opts {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
-  font: 600 14px/1.2 var(--ui); color: var(--ink-black);
-}
-.edit-opts select {
-  padding: 2px 4px;
-  border: 1.5px solid #c9c2b5; border-radius: 4px;
-  background: #fff; color: var(--ink-black); font: inherit;
-}
-.edit-opts label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; cursor: pointer; }
-.edit-opts input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--ink-blue); }
-.edit-opts select:focus, .edit-opts input:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 1px; }
-.edit-opts label:has(input:disabled) { opacity: .5; cursor: default; }
-
-/* In de bewerkmodus voeg je toe via "Toevoegen" in de bedieningsbalk, niet via het plusje */
+.title-edit:focus { outline: none; }
+/* Tips bewerk je via hun vel; een klik op een tip zegt welk vel dat is */
+.edit-mode .tips-list li { cursor: help; }
+/* Geen plusje: in de bewerkmodus komen tips via het tekstvak van een vel */
 .edit-mode .add-tip { display: none; }
 
-/* Toevoegmenu, boven de knop in de bedieningsbalk */
-.controls.menu-open { opacity: 1; } /* .controls is position: fixed en dus het ankerpunt */
-.add-menu {
-  position: absolute; right: 0; bottom: calc(100% + 8px);
-  display: flex; flex-direction: column;
-  min-width: 230px; padding: 6px;
-  background: #24282d; color: #e8eaed;
-  border-radius: 10px;
-  box-shadow: inset 0 0 0 1px #4a5058, 0 10px 24px rgba(0,0,0,.35);
+/* Tekstvak over het hele vel, met de uitleg en de knoppen eronder */
+.sheet-editor {
+  position: absolute; inset: 0 0 12px 0; z-index: 6;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px;
+  background: #fffdf5;
+  box-shadow: inset 0 0 0 2px var(--ink-blue);
+  font-family: var(--ui);
 }
-.add-menu[hidden] { display: none; }
-.controls .add-menu button {
-  width: 100%; height: auto;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  padding: 8px 10px; border-radius: 6px;
-  font-size: 15px; font-weight: 600; text-align: left;
+.sheet-editor-text {
+  flex: 1 1 auto; min-height: 0; width: 100%;
+  margin: 0; padding: 8px;
+  border: 1.5px solid #c9c2b5; border-radius: 4px;
+  background: #fff; color: var(--ink-black);
+  font: 15px/1.45 ui-monospace, Consolas, 'Cascadia Mono', monospace; /* vaste breedte: inspringen is te zien */
+  tab-size: 2; white-space: pre-wrap; resize: none;
 }
-.add-menu small { font-size: 12px; font-weight: 400; color: #a7b0b8; }
-.controls .add-menu button:hover,
-.controls .add-menu button:focus-visible { background: rgba(255,255,255,.12); outline: none; }
+.sheet-editor-text:focus { outline: 2px solid var(--ink-blue); outline-offset: 1px; border-color: transparent; }
+.sheet-editor-help { margin: 0; font-size: 13px; line-height: 1.4; color: #4a4a4a; }
+.sheet-editor-help code { font: 600 13px ui-monospace, Consolas, monospace; color: var(--ink-blue); }
+.sheet-editor-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.sheet-editor-buttons button {
+  padding: 7px 14px; border-radius: 6px;
+  border: 1.5px solid #9a9488; background: #fff; color: var(--ink-black);
+  font: 600 14px var(--ui); cursor: pointer;
+}
+.sheet-editor-buttons button.primary { border-color: var(--ink-blue); background: var(--ink-blue); color: #fff; }
+.sheet-editor-buttons button:hover { filter: brightness(.95); }
+.sheet-editor-buttons button:focus-visible { outline: 2px solid var(--ink-blue); outline-offset: 2px; }
+
+/* Korte melding boven de bedieningsbalk. Altijd in de pagina (een voorleesregio), leeg onzichtbaar. */
+.edit-notice {
+  position: fixed; left: 50%; bottom: 72px; z-index: 50;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  font: 500 15px/1.4 var(--ui); color: #e8eaed; text-align: center;
+}
+.edit-notice:not(:empty) {
+  padding: 10px 16px; border-radius: 10px;
+  background: #24282d; box-shadow: inset 0 0 0 1px #4a5058, 0 10px 24px rgba(0,0,0,.35);
+}
 
 /* Label in de bedieningsbalk */
 .edit-badge { margin-left: 4px; padding: 3px 8px; border-radius: 10px; background: #ffd666; color: #3a2a00; font-weight: 600; white-space: nowrap; }

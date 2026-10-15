@@ -97,7 +97,7 @@ In CI kan het wachtwoord via een omgevingsvariabele: `PRESENTATIE_WACHTWOORD=...
 | `type` | Waar | Eigenschappen naast `text` |
 |---|---|---|
 | `keyword` | Rechts op het vel, onder de titel | `color`, `indent`, `numbered`, `gap` (zie hieronder) |
-| `tip` | Links, onderaan de lijst met tips; met een belletje | `user`: `true` als de tip tijdens de presentatie is toegevoegd (rood plusje in plaats van een ster). Dat zet de presentatie zelf; in de bewerkmodus kun je het aan- en uitvinken. |
+| `tip` | Links, onderaan de lijst met tips; met een belletje | `user`: `true` als de tip tijdens de presentatie is toegevoegd (rood plusje in plaats van een ster). Dat zet de presentatie zelf; opslaan in de bewerkmodus maakt er weer een gewone tip van. |
 | `question` | In de vraagzone onderaan het whiteboard; met een opgaande toon | — |
 | `check` | Vinkt een doel af: in het vakje bij dat doel wordt een groen vinkje getekend, met een schrijfgeluidje | `goal`: de `id` van het doel (geen `text`) |
 
@@ -116,7 +116,7 @@ Regels:
 - Een onbekend type, een item zonder tekst, een lege step of een ongeldige eigenschap geeft een melding en wordt overgeslagen of krijgt de standaardwaarde. `tools/encrypt.js` meldt dit al bij het versleutelen, en de motor geeft een waarschuwing in de console. Beide gebruiken dezelfde controle uit `js/content.js`.
 - Een vel zonder titel, of iets wat geen vel is, is een **fout**: `tools/encrypt.js` weigert dan te versleutelen en noemt welk vel het is. Met `?plain` toont de presentatie zo'n vel wel (met een lege titel en een foutmelding in de console), zodat je kunt doorwerken.
 
-Nieuwe soorten items toevoegen: zie `ITEM_TYPES` in `js/content.js` en de functies `keywordsAt`, `tipsAt`, `questionAt` en `checkedGoalsAt` in `js/app.js`.
+Nieuwe soorten items toevoegen: zie `ITEM_TYPES` in `js/content.js` en de functies `keywordsAt`, `tipsAt`, `questionAt` en `checkedGoalsAt` in `js/app.js`. Voor de bewerkmodus ook de tekstnotatie in `js/sheet-text.js` (`stepsToText` en `textToSteps`).
 
 ## Bediening
 
@@ -130,28 +130,47 @@ Nieuwe soorten items toevoegen: zie `ITEM_TYPES` in `js/content.js` en de functi
 | Volledig scherm | F |
 | Werkafspraken tonen / verbergen | W of de knop **Werkafspraken** (Esc verbergt ze ook) |
 | Naar een onderwerp | Klik op een geeltje |
-| Tip toevoegen | **+** (Shift+=) of klik op **+** op de Tips-flip-over, typ, Enter (Esc = annuleren) |
+| Tip toevoegen | **+** (Shift+=) of klik op **+** op de Tips-flip-over, typ, Enter (Esc = annuleren); niet in de bewerkmodus |
 | Vellen als PDF | Knop **Vellen opslaan als PDF** op het afsluitscherm, of Ctrl+P |
-| Item toevoegen (bewerkmodus) | **+** of **＋ Toevoegen** in de bedieningsbalk, kies Tip, Steekwoord of Vraag |
+| Vel bewerken (bewerkmodus) | **E**, klik op de rechter flip-over of **Vel bewerken**; opslaan Ctrl+Enter, annuleren Esc |
 
 Na het inloggen opent de presentatie op een donker startscherm met "WELKOM". Daar werken alleen **Start** (knop, pijl rechts of spatie) en volledig scherm (F); vorige, Home/End en tip toevoegen doen niets. Terug vanaf de eerste inhoud brengt je weer op het startscherm.
 
 **Tips tijdens de presentatie:** een tip die je met het plusje toevoegt, komt als gewoon item met `"user": true` in de huidige klik (heb je op dit vel nog niets geklikt, dan wordt het een nieuwe eerste klik). Hij krijgt een rood plusje. Blader je terug tot vóór die klik, dan verdwijnt hij; vooruit verschijnt hij weer. Toegevoegde tips staan alleen in het geheugen; bewaar ze via het afsluitscherm, dan verschijnen ze na opnieuw laden bij dezelfde klik.
 
-**Bewerken (`?edit`):** zet `?edit` in de adresbalk (bijvoorbeeld `http://localhost:3000/?edit`, of samen met plain: `?plain&edit`). In de bedieningsbalk staat dan een geel label "✎ Bewerken", en tips, steekwoorden en vragen krijgen bij aanwijzen een gestippelde rand. Klik erop en er verschijnt een tekstvak met de focus erop.
+**Bewerken (`?edit`):** zet `?edit` in de adresbalk (bijvoorbeeld `http://localhost:3000/?edit`). De bewerkmodus werkt altijd met de versleutelde inhoud en het wachtwoord: `?plain` en `?edit` gaan niet samen, en met allebei in de adresbalk krijg je de gewone bewerkmodus. In de bedieningsbalk staan dan een geel label "✎ Bewerken" en de knop **Vel bewerken**. Je bewerkt een vel in één keer, als tekst: klik ergens op de rechter flip-over, op **Vel bewerken** of druk op **E**. Over het vel verschijnt dan één groot tekstvak met alle klikken van het vel, de focus erin.
 
-- **Enter** of wegklikken slaat de tekst op, **Esc** annuleert. Een leeg tekstvak opslaan geldt als annuleren. Het tekstvak breekt af zoals de regel zelf en groeit mee met de tekst; een geplakt regeleinde wordt een spatie.
-- **Verwijderen:** zolang een tekstvak open is, staat ernaast een rode knop met een prullenbak (tooltip "Verwijderen"). Die verwijdert het item dat je bewerkt. Wordt een klik daardoor leeg, dan verdwijnt de hele klik. De presentatie blijft op hetzelfde moment staan. Er is geen Verwijder-knop als er niets wordt bewerkt.
-- **Instellingen** onder het tekstvak. Ze gelden en worden bewaard zodra je ze kiest, ook als je daarna de tekst met Esc annuleert:
-  - bij een **steekwoord**: kleur (`default` = geen `color` in de JSON, dus blauw), inspringen (0–2), genummerd en ruimte erboven (geen, witruimte, lijn). Standaardwaarden komen niet in de JSON;
-  - bij een **tip**: **tijdens presentatie** (`"user": true`, rood plusje in plaats van een ster). Aan- en uitvinken werkt bij elke tip, ook bij nieuwe en bestaande;
-  - bij **elk item**: **nieuwe klik**. Aangevinkt betekent dat dit item een eigen klik begint. Aanvinken splitst de klik vóór dit item (dit item en alles erna in die klik worden een nieuwe klik); uitvinken voegt de klik samen met de vorige. Het beeld blijft daarbij gelijk. Het eerste item van een vel begint altijd een klik, en twee klikken die allebei een vraag hebben kun je niet samenvoegen.
-- **Toevoegen:** in de bewerkmodus is het plusje op de Tips-flip-over weg. In plaats daarvan staat rechtsonder in de bedieningsbalk de knop **＋ Toevoegen** (of druk op de plustoets). Die opent een menu met **Tip**, **Steekwoord** en **Vraag**; met de pijltjestoetsen kies je, Esc sluit het menu. Het gekozen item komt **achteraan de huidige klik** (heb je op dit vel nog niets geklikt, dan in een nieuwe eerste klik) en verschijnt meteen op zijn plek, met het tekstvak open. Wil je er een eigen klik van maken, vink dan "nieuwe klik" aan. "Vraag" staat uit als de huidige klik al een vraag heeft. Annuleer je (Esc) of laat je het leeg, dan verdwijnt het weer. Op het start- en afsluitscherm kun je niets toevoegen.
-- Doelen en `check`-items zijn (nog) niet in de bewerkmodus te bewerken; die zet je in de JSON.
+**Titel van een vel:** die staat niet in het tekstvak. Klik op de titel bovenaan het vel (of ga er met Tab naartoe en druk op Enter): de titel wordt een invoerveld op dezelfde plek. **Enter** of wegklikken slaat op, **Esc** annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren.
+
+- **Opslaan** (of Ctrl+Enter) verwerkt alles in één keer; daarna is het hele vel in beeld. **Annuleren** (of Esc) gooit alle wijzigingen weg. Wegklikken doet niets, en zolang het tekstvak open is kun je niet naar een ander vel.
+- Eén item per regel. Onder het tekstvak staat dezelfde uitleg kort samengevat; die is algemeen en noemt niets uit de inhoud van de presentatie (dus ook niet de ids van de doelen):
+
+| Regel | Wordt |
+|---|---|
+| `* tekst`, `- tekst` of `• tekst` | steekwoord met bullet; welke bullet volgt uit het inspringen |
+| `1. tekst` (elk getal vanaf 1) | genummerd steekwoord; de presentatie nummert zelf, het getal telt niet |
+| 2 spaties ervoor / 4 of meer | 1× / 2× inspringen (een tab telt als 2 spaties) |
+| `[red]` of `[rood]`, waar dan ook op de regel | kleur van het steekwoord: `blue`, `red`, `black`, `green`, `yellow`, `orange`, `purple`, `pink`. De Nederlandse namen (`blauw`, `rood`, `zwart`, `groen`, `geel`, `oranje`, `paars`, `roze`) werken ook; hoofdletters maken niet uit. Het eerste kleurlabel telt; alle kleurlabels verdwijnen uit de tekst. Het tekstvak en de uitleg eronder gebruiken de Engelse namen. |
+| lege regel | witruimte boven het volgende steekwoord |
+| `---` (3 of meer) | lijn boven het volgende steekwoord |
+| `->`, `-->` of `→` | nieuwe klik |
+| `? tekst` | vraag op het whiteboard; een tweede vraag in dezelfde klik begint vanzelf een nieuwe klik |
+| `! tekst` | tip op de linker flip-over |
+| `+id` | vinkt het doel met die id af (hoofdletters maken niet uit) |
+| elke andere regel | steekwoord met bullet |
+
+- Wat na `*`, `-`, `•` of een nummer staat is gewone tekst: `* ? geen vraag` is een steekwoord. Een onbekende kleur of doel-id blijft gewoon tekst; een geldig kleurlabel wordt overal weggehaald (ook uit een vraag of tip), dus `[rood]` kun je niet letterlijk als tekst gebruiken.
+- Een regel met alleen codes en geen tekst, zoals `* [rood]`, `?`, `!`, `1.` of `+`, wordt overgeslagen.
+- Onzichtbare tekens aan het begin en eind van een regel (zero-width space, BOM, richtingstekens, zacht afbreekstreepje) tellen niet mee; een regel met alleen zulke tekens is een lege regel. Een losse `\r` en de Unicode-regelscheidingen U+2028 en U+2029 (soms meegeplakt uit Word of een pdf) zijn een nieuwe regel.
+- Ruimte en lijnen gelden alleen vóór een steekwoord: vóór een vraag, tip, doel of klik en bovenaan het vel vervallen ze. Meerdere lege regels, lijnen of klikken achter elkaar tellen als één (een lijn wint van witruimte); een klik aan het begin of eind telt niet.
+- Kleur en inspringen op een vraag, tip of doel worden genegeerd. Tips worden bij opslaan altijd gewone tips (zonder `"user": true`): in de bewerkmodus presenteer je niet.
+- **Tips** bewerk en voeg je alleen zo toe, via het vel waar ze bij horen. Het plusje op de Tips-flip-over is in de bewerkmodus weg, en een klik op een tip links geeft een melding op welk vel die tip staat.
+- Onderdelen die je niet verandert, blijven precies wat ze waren; op het afsluitscherm tellen alleen echte wijzigingen mee (ook een gewijzigde veltitel).
+- Doelen zelf (de tekst in de strook) en de namen van de geeltjes zijn (nog) niet in de bewerkmodus te bewerken; die zet je in de JSON.
 - De bewerkmodus is stil: het belletje, de vraagtoon, het papiergeritsel, het schrijfgeluid en de geluidjes van de geeltjes klinken niet.
 - Wijzigingen staan alleen in het geheugen en zijn weg na herladen. Bewaar ze via het afsluitscherm.
 
-**Afsluitscherm en wijzigingen bewaren:** na de laatste inhoud volgt een donker afsluitscherm met "EINDE". Daar wordt gecontroleerd of de inhoud is gewijzigd. Zo ja, dan staat er groot een knop **Download content.json**, met daaronder hoeveel items je hebt toegevoegd, bewerkt en verwijderd. In de download zijn alleen de steps van gewijzigde vellen vervangen; al het andere blijft precies zoals het was (ongeldige items in een gewijzigd vel, die de presentatie al oversloeg, vallen daarbij weg). Let op: dit bestand is **onversleuteld**. Zet het in de projectmap, versleutel het opnieuw (`node tools/encrypt.js`) en verwijder de download daarna.
+**Afsluitscherm en wijzigingen bewaren:** na de laatste inhoud volgt een donker afsluitscherm met "EINDE". Daar wordt gecontroleerd of de inhoud is gewijzigd. Zo ja, dan staat er groot een knop **Download content.json**, met daaronder hoeveel items je hebt toegevoegd, bewerkt en verwijderd. In de download zijn alleen de titel en de steps van gewijzigde vellen vervangen; al het andere blijft precies zoals het was (ongeldige items in een gewijzigd vel, die de presentatie al oversloeg, vallen daarbij weg). Let op: dit bestand is **onversleuteld**. Zet het in de projectmap, versleutel het opnieuw (`node tools/encrypt.js`) en verwijder de download daarna.
 
 **Vellen als PDF:** op het afsluitscherm staat altijd de knop **Vellen opslaan als PDF**. Die opent het afdrukvenster van de browser; kies daar "Opslaan als PDF" als printer. De PDF bevat:
 
@@ -175,7 +194,7 @@ Het beeld schaalt mee met het browservenster en vult altijd de breedte of de hoo
 
 ### Links: de flip-over met tips
 
-Een staande flip-over: bovenaan een donkergrijze klem met twee ronde, metalen draaiknoppen, die een blok papier vasthoudt. Je ziet het voorste vel, lichtcrème; onderaan het vel zijn de randen van de vellen eronder te zien, als dunne lijntjes van een stapel papier. Onder het blok staan drie dunne donkergrijze metalen poten. Linksboven op het vel staat in groene markerletters, iets scheef, het woord "Tips". Rechtsboven op het vel staat een kleine ronde knop: een groene cirkel met een plusteken erin, half doorzichtig tot je er met de muis overheen gaat. Daarmee voeg je zelf een tip toe. In de bewerkmodus ontbreekt dit plusje; dan staat er rechtsonder in de bedieningsbalk een knop "Toevoegen", die een donker menu opent met Tip, Steekwoord en Vraag.
+Een staande flip-over: bovenaan een donkergrijze klem met twee ronde, metalen draaiknoppen, die een blok papier vasthoudt. Je ziet het voorste vel, lichtcrème; onderaan het vel zijn de randen van de vellen eronder te zien, als dunne lijntjes van een stapel papier. Onder het blok staan drie dunne donkergrijze metalen poten. Linksboven op het vel staat in groene markerletters, iets scheef, het woord "Tips". Rechtsboven op het vel staat een kleine ronde knop: een groene cirkel met een plusteken erin, half doorzichtig tot je er met de muis overheen gaat. Daarmee voeg je zelf een tip toe. In de bewerkmodus ontbreekt dit plusje; een klik op een tip geeft dan een korte melding op welk vel die tip te bewerken is.
 
 Het vel begint leeg. Tijdens de presentatie verschijnen er tips onder elkaar, in zwart handschrift, elk met een groen sterretje ervoor. Tips die tijdens de presentatie zijn toegevoegd (`"user": true`), krijgen een rood plusteken in plaats van een sterretje. Tips blijven staan en de lijst groeit; als het vel vol raakt, worden alle letters kleiner zodat alles blijft passen.
 
@@ -217,7 +236,9 @@ Verder:
 
 ### De bedieningsbalk
 
-Rechtsonder in beeld staat een kleine, afgeronde, donkergrijze balk die half doorzichtig is. Hij verschijnt als je de muis beweegt en verdwijnt na twee seconden weer. Van links naar rechts staan erin: een pijl naar links (vorige), de voortgang (bijvoorbeeld "2 / 6", of "Einde" op het afsluitscherm), een pijl naar rechts (volgende), de vetgedrukte knop "Werkafspraken" (om de werkafspraken te tonen of te verbergen) en een knop voor volledig scherm. Bij de laatste inhoud verandert de pijl naar rechts in de vetgedrukte tekst "Einde" met een pijltje: die knop gaat naar het afsluitscherm. Op het startscherm staat op die plek op dezelfde manier "Start" met een pijltje. De balk blijft staan zolang de muis erboven is of een knop erin de focus heeft. In de bewerkmodus komen er achteraan nog twee dingen bij: een geel label "✎ Bewerken" en de knop "＋ Toevoegen", die een donker menu omhoog laat uitklappen.
+Rechtsonder in beeld staat een kleine, afgeronde, donkergrijze balk die half doorzichtig is. Hij verschijnt als je de muis beweegt en verdwijnt na twee seconden weer. Van links naar rechts staan erin: een pijl naar links (vorige), de voortgang (bijvoorbeeld "2 / 6", of "Einde" op het afsluitscherm), een pijl naar rechts (volgende), de vetgedrukte knop "Werkafspraken" (om de werkafspraken te tonen of te verbergen) en een knop voor volledig scherm. Bij de laatste inhoud verandert de pijl naar rechts in de vetgedrukte tekst "Einde" met een pijltje: die knop gaat naar het afsluitscherm. Op het startscherm staat op die plek op dezelfde manier "Start" met een pijltje. De balk blijft staan zolang de muis erboven is of een knop erin de focus heeft. In de bewerkmodus komen er achteraan nog twee dingen bij: een geel label "✎ Bewerken" en de vetgedrukte knop "Vel bewerken".
+
+In de bewerkmodus krijgt de rechter flip-over bij aanwijzen een blauwe rand. Bewerk je een vel, dan ligt er over het hele vel een lichtcrème vlak met een blauwe rand. Daarin staat bovenaan een groot wit tekstvak in een gewoon, vast-breed lettertype (geen handschrift), met alle klikken van het vel als tekst (zonder de titel). Daaronder staat in kleine grijze letters de korte uitleg van de notatie, met de tekens in blauw. Helemaal onderaan staan rechts twee knoppen: "Annuleren" (wit met een grijze rand) en "Opslaan" (blauw met witte letters). De titel van het vel krijgt bij aanwijzen een heel lichtblauwe achtergrond; klik je erop, dan wordt hij een lichtgeel invoerveld met dezelfde blauwe markerletters en een gestippelde blauwe lijn eronder. Een melding, bijvoorbeeld na een klik op een tip, verschijnt even midden onderin beeld, boven de bedieningsbalk, als witte tekst op een donkergrijs, afgerond vlak, en verdwijnt na zes seconden.
 
 ### Het startscherm
 
@@ -229,7 +250,7 @@ Rechtsonder staat de bedieningsbalk, altijd zichtbaar, donkergrijs met een licht
 
 Na de laatste inhoud volgt een afsluitscherm in donkere modus. Het hele beeld is dan bijna zwart, met in het midden een heel zachte, iets lichtere gloed. Midden in beeld staat in grote, vette, bijna witte hoofdletters met veel ruimte tussen de letters het woord "EINDE". Het whiteboard en de flip-overs zijn niet meer te zien.
 
-Is de inhoud tijdens de presentatie gewijzigd (tips toegevoegd, of in de bewerkmodus items toegevoegd, bewerkt, verwijderd of anders over klikken verdeeld), dan staat onder "EINDE" een grote, afgeronde, felgroene knop met donkere tekst: een pijl naar beneden en "Download content.json". Daaronder staat in lichtgrijze tekst wat er gewijzigd is (bijvoorbeeld "Je hebt 2 onderdelen toegevoegd en 1 onderdeel bewerkt") en dat het bestand onversleuteld is. Zonder wijzigingen ontbreekt die knop en de tekst eronder.
+Is de inhoud tijdens de presentatie gewijzigd (tips toegevoegd, of in de bewerkmodus een vel aangepast), dan staat onder "EINDE" een grote, afgeronde, felgroene knop met donkere tekst: een pijl naar beneden en "Download content.json". Daaronder staat in lichtgrijze tekst wat er gewijzigd is (bijvoorbeeld "Je hebt 2 onderdelen toegevoegd en 1 onderdeel bewerkt") en dat het bestand onversleuteld is. Zonder wijzigingen ontbreekt die knop en de tekst eronder.
 
 Tussen "EINDE" en de downloadknop staat altijd een tweede grote, afgeronde knop, maar niet gevuld: een felgroene rand op de donkere achtergrond, met bijna witte tekst "Vellen opslaan als PDF" en daarvoor een klein groen printer-icoontje (lijntekening). Daaronder staat in lichtgrijze tekst: "Alle vellen en de tips, elk op een A4. Kies in het afdrukvenster ‘Opslaan als PDF’."
 
@@ -259,12 +280,12 @@ Eerlijk gezegd is de presentatie vooral visueel. Wat er nu is:
 - De knop met het plusje heet "Tip toevoegen" en de invoerregel heet "Nieuwe tip".
 - Navigeren kan volledig met het toetsenbord (zie Bediening). De geluiden geven aan wat er verschijnt: belletje voor een tip, geritsel voor een nieuw vel, opgaande toon voor een vraag, schrijfgeluid voor een afgevinkt doel, en bij een nieuw onderwerp twee keer "oppakken en vastplakken" voor de geeltjes die verhuizen.
 
-In de bewerkmodus heet het tekstvak "Tip bewerken", "Steekwoord bewerken" of "Vraag bewerken". De instellingen eronder heten "Kleur", "Inspringen" en "Ruimte erboven" (keuzelijsten) en "genummerd", "tijdens presentatie" (bij een tip) en "nieuwe klik" (aankruisvakjes); een uitgeschakeld vakje legt in zijn tooltip uit waarom. Direct na het tekstvak volgt de knop "Tip verwijderen", "Steekwoord verwijderen" of "Vraag verwijderen". De knop "＋ Toevoegen" (beschrijving "Item toevoegen aan deze klik") opent een menu "Toevoegen" met de items Tip, Steekwoord en Vraag, elk met een korte uitleg waar het verschijnt; de focus springt meteen naar het eerste beschikbare item. Een uitgeschakeld item ("Vraag" als de klik al een vraag heeft) legt in zijn tooltip uit waarom. Het tekstvak krijgt direct de focus, zodat een schermlezer het meteen aankondigt. Tips en steekwoorden zelf zijn met de muis aan te klikken, maar nog niet met het toetsenbord te bereiken.
+In de bewerkmodus is "Vel bewerken" een echte knop met als sneltoets E. Het tekstvak heet "Klikken van het vel als tekst" en heeft de korte uitleg van de notatie als beschrijving; het ligt in een groep "Vel bewerken:" gevolgd door de titel, en krijgt direct de focus, zodat een schermlezer het meteen aankondigt. Daarna volgen de knoppen "Annuleren" en "Opslaan"; Esc en Ctrl+Enter werken ook. Na opslaan of annuleren gaat de focus terug naar waar hij was (bijvoorbeeld de knop "Vel bewerken"). De melding na een klik op een tip wordt automatisch voorgelezen. De rechter flip-over zelf is alleen met de muis aan te klikken; met het toetsenbord gebruik je E of de knop. De titel van het vel (een kop) is in de bewerkmodus ook met Tab te bereiken en heeft als tooltip "Titel bewerken (klik of Enter)"; Enter maakt er een invoerveld "Titel van het vel" van, met de focus erin. Na Enter of Esc gaat de focus terug naar de titel.
 
 Wat er nog niet is:
 
 - Nieuwe steekwoorden, het verschuiven van geeltjes en de voortgang ("2 / 6") worden niet automatisch voorgelezen.
-- De knoppen vorige, volgende en volledig scherm in de bedieningsbalk zijn tekens (pijlen en een kadertje) met alleen een beschrijving als tooltip, geen echte naam. "Start", "Einde", "Werkafspraken" en "＋ Toevoegen" hebben wel een echte naam.
+- De knoppen vorige, volgende en volledig scherm in de bedieningsbalk zijn tekens (pijlen en een kadertje) met alleen een beschrijving als tooltip, geen echte naam. "Start", "Einde", "Werkafspraken" en "Vel bewerken" hebben wel een echte naam.
 - Een aantal dingen bestaat alleen in de opmaak en wordt dus niet als tekst doorgegeven: het rode plusteken bij een tijdens de presentatie toegevoegde tip, de kleuren, het inspringen en de lijnen tussen steekwoorden. De nummers bij genummerde steekwoorden komen ook uit de opmaak; of een schermlezer die voorleest, verschilt per schermlezer.
 
 ## Goed om te weten
