@@ -1060,7 +1060,7 @@ function editInPlace(el, { label, className, onSave, onDone, onCancel }) {
   const original = el.textContent;
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = className;
+  input.className = className + ' in-place'; // in-place: zie de waarschuwing bij sluiten
   input.value = original;
   input.setAttribute('aria-label', label);
   let done = false;
@@ -1281,7 +1281,7 @@ function editGoal(li) {
   const target = li.querySelector(goal ? '.goal-text' : '.goal-add-btn');
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = 'goal-edit';
+  input.className = 'goal-edit in-place';
   input.maxLength = GOAL_TEXT_MAX;
   input.value = goal ? goal.text : '';
   input.setAttribute('aria-label', goal ? 'Tekst van het doel' : 'Nieuw doel');
@@ -1938,7 +1938,10 @@ let exportedJson = null; // de inhoud zoals voor het laatst gedownload (JSON); n
 // getypt is.
 window.addEventListener('beforeunload', (e) => {
   if (!deck) return;
-  const open = textEditor !== null || document.querySelector('.title-edit, .goal-edit') !== null;
+  // Alles wat open staat en nog niet is opgeslagen: een tekstvak, een invoerveld op zijn plek
+  // (titel, naam, doel) of een half getypte tip (live).
+  const open = textEditor !== null || document.querySelector('.in-place') !== null
+    || (!els.tipForm.hidden && els.tipInput.value.trim() !== '');
   const current = JSON.stringify(contentWithChanges());
   if (!open && current === (exportedJson ?? JSON.stringify(rawContent))) return;
   e.preventDefault();
