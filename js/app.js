@@ -501,8 +501,10 @@ function updateButtons() {
   els.deleteTopicBtn.disabled = !isContent(pos) || editing || onlyTopic;
   els.deleteTopicBtn.title = onlyTopic ? 'Er moet altijd minstens één onderwerp zijn' : 'Dit onderwerp verwijderen (S)';
   const onlySheet = isContent(pos) && deck.topics[flat[pos.sheet].topic].sheets.length === 1;
-  els.deleteSheetBtn.disabled = !isContent(pos) || editing || onlySheet;
-  els.deleteSheetBtn.title = onlySheet ? 'Het enige vel van dit onderwerp kan niet weg' : 'Dit vel verwijderen (V)';
+  const lastSheet = onlySheet && deck.topics.length === 1;
+  els.deleteSheetBtn.disabled = !isContent(pos) || editing || lastSheet;
+  els.deleteSheetBtn.title = lastSheet ? 'Het enige vel van de presentatie kan niet weg'
+    : onlySheet ? 'Dit vel verwijderen (V); het onderwerp verdwijnt dan ook' : 'Dit vel verwijderen (V)';
   const addGoalBtn = els.goals.querySelector('.goal-add-btn');
   if (addGoalBtn) addGoalBtn.disabled = !isContent(pos) || editing;
 }
@@ -1177,8 +1179,15 @@ function deleteSheet() {
   if (!editMode || textEditor || !isContent(pos)) return;
   const f = flat[pos.sheet];
   const sheets = deck.topics[f.topic].sheets;
-  if (sheets.length === 1) return showNotice('Dit is het enige vel van dit onderwerp; dat kan niet weg.');
-  if (f.steps.length && !confirm(`Vel „${f.title}” verwijderen?\n\nOp dit vel staan ${describeContent(f.steps)}. Die verdwijnen mee.`)) return;
+  const what = f.steps.length ? `Op dit vel staan ${describeContent(f.steps)}. Die verdwijnen mee.` : '';
+  if (sheets.length === 1) {
+    // Het enige vel van het onderwerp: dan verdwijnt het onderwerp ook (altijd bevestigen).
+    if (deck.topics.length === 1) return showNotice('Dit is het enige vel van de presentatie; dat kan niet weg.');
+    const sticky = deck.topics[f.topic].sticky;
+    if (!confirm(`Vel „${f.title}” verwijderen?\n\nDit is het enige vel van onderwerp „${sticky}”, dus dat onderwerp verdwijnt ook. ${what}`.trim())) return;
+    return removeTopicAt(f.topic);
+  }
+  if (f.steps.length && !confirm(`Vel „${f.title}” verwijderen?\n\n${what}`)) return;
   const first = f.sheet === 0; // dan naar het volgende vel van dit onderwerp, anders het vorige
   sheets.splice(f.sheet, 1);
   rebuildFlat();
@@ -1247,10 +1256,16 @@ function deleteTopic() {
   const topic = deck.topics[t];
   const steps = topic.sheets.flatMap((sheet) => sheet.steps);
   if (steps.length && !confirm(`Onderwerp „${topic.sticky}” verwijderen?\n\nHierin staan ${describeContent(steps, topic.sheets.length)}. Die verdwijnen mee.`)) return;
+  removeTopicAt(t);
+}
+
+/**
+ * Haalt onderwerp t weg. Daarna sta je op het laatste vel van het vorige onderwerp (helemaal
+ * ingevuld), of bij het eerste onderwerp op het begin van het volgende; dat onderwerp komt in Doing.
+ */
+function removeTopicAt(t) {
   deck.topics.splice(t, 1);
   topicsUpdated();
-  // Naar het laatste vel van het vorige onderwerp (helemaal ingevuld), of bij het eerste
-  // onderwerp naar het begin van het volgende. Dat onderwerp komt in Doing.
   if (t === 0) pos = { sheet: 0, step: 0 };
   else {
     const last = (t < deck.topics.length ? firstSheetOfTopic[t] : flat.length) - 1;
@@ -1304,25 +1319,32 @@ function moveTopic(delta) {
 function moveSheet(delta) {
   if (!editMode || textEditor || !isContent(pos)) return;
   const f = flat[pos.sheet];
-  const sheets = deck.topics[f.topic].sheets;
+  const source = deck.topics[f.topic];
+  const sheets = source.sheets;
   const step = pos.step;
   const to = f.sheet + delta;
   if (to >= 0 && to < sheets.length) {
     sheets.splice(to, 0, ...sheets.splice(f.sheet, 1));
   } else {
-    // Naar het vorige of volgende onderwerp; het enige vel van een onderwerp blijft.
+    // Naar het vorige of volgende onderwerp. Was het het enige vel, dan verdwijnt dat onderwerp.
     const target = deck.topics[f.topic + delta];
-    if (!target || sheets.length === 1) return;
+    if (!target) return;
     const earlier = delta < 0;
-    if (!confirm(`Vel „${f.title}” naar het ${earlier ? 'vorige' : 'volgende'} onderwerp „${target.sticky}” verplaatsen?\n\nHet komt daar als ${earlier ? 'laatste' : 'eerste'} vel.`)) return;
+    const emptied = sheets.length === 1 ? ` Dit is het enige vel van onderwerp „${source.sticky}”, dus dat onderwerp verdwijnt.` : '';
+    if (!confirm(`Vel „${f.title}” naar het ${earlier ? 'vorige' : 'volgende'} onderwerp „${target.sticky}” verplaatsen?\n\nHet komt daar als ${earlier ? 'laatste' : 'eerste'} vel.${emptied}`)) return;
     sheets.splice(f.sheet, 1);
     if (earlier) target.sheets.push(f.model); else target.sheets.unshift(f.model);
+    if (emptied) {
+      deck.topics.splice(deck.topics.indexOf(source), 1);
+      buildStickies();
+      fitStickyText(stickyFontPx);
+    }
   }
   rebuildFlat();
   pos = { sheet: flat.findIndex((g) => g.model === f.model), step };
   render(null);
   const g = flat[pos.sheet];
-  const where = g.topic === f.topic ? '' : ` bij „${deck.topics[g.topic].sticky}”`;
+  const where = deck.topics[g.topic] === source ? '' : ` bij „${deck.topics[g.topic].sticky}”`;
   showNotice(`Vel staat nu op plek ${g.sheet + 1} van ${deck.topics[g.topic].sheets.length}${where}.`);
 }
 
@@ -1335,13 +1357,13 @@ function updateMoveButtons(editing) {
   set(els.topicEarlier, content && f.topic > 0, f && f.topic === 0 ? 'Dit is het eerste onderwerp' : 'Onderwerp een plek eerder');
   set(els.topicLater, content && f.topic < lastTopic, f && f.topic === lastTopic ? 'Dit is het laatste onderwerp' : 'Onderwerp een plek later');
   const count = f ? deck.topics[f.topic].sheets.length : 0;
-  const only = 'Het enige vel van dit onderwerp blijft hier';
+  const gone = count === 1 ? '; dit onderwerp verdwijnt dan' : '';
   const earlier = !f ? '' : f.sheet > 0 ? 'Vel een plek eerder'
-    : f.topic === 0 ? 'Dit is het eerste vel' : count === 1 ? only : 'Vel naar het vorige onderwerp (als laatste)';
+    : f.topic === 0 ? 'Dit is het eerste vel' : `Vel naar het vorige onderwerp (als laatste)${gone}`;
   const later = !f ? '' : f.sheet < count - 1 ? 'Vel een plek later'
-    : f.topic === lastTopic ? 'Dit is het laatste vel' : count === 1 ? only : 'Vel naar het volgende onderwerp (als eerste)';
-  set(els.sheetEarlier, content && (f.sheet > 0 || (f.topic > 0 && count > 1)), earlier);
-  set(els.sheetLater, content && (f.sheet < count - 1 || (f.topic < lastTopic && count > 1)), later);
+    : f.topic === lastTopic ? 'Dit is het laatste vel' : `Vel naar het volgende onderwerp (als eerste)${gone}`;
+  set(els.sheetEarlier, content && (f.sheet > 0 || f.topic > 0), earlier);
+  set(els.sheetLater, content && (f.sheet < count - 1 || f.topic < lastTopic), later);
 }
 
 /* ---------- Doelen bewerken (?edit) ---------- */
