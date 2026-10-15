@@ -29,7 +29,6 @@ const els = {
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
   keywordTitle: $('#keyword-title'),
-  pointerAnnouncer: $('#pointer-announcer'),
   startSubtitle: $('#start-subtitle'),
   agreements: $('#agreements-list'),
   goals: $('#goals-list'),
@@ -548,7 +547,7 @@ function buildGoals() {
     text.textContent = goal.text;
     const state = document.createElement('span');
     state.className = 'sr-only';
-    li.append(text, state);
+    li.append(state, text); // de toestand vóór de tekst: een schermlezer leest eerst (x)
     if (editMode) {
       li.append(goalCode(goal.id));
       text.setAttribute('aria-describedby', 'goal-code-' + goal.id);
@@ -612,7 +611,7 @@ function renderGoals(checked, drawIds, delay) {
     if (!li.dataset.goal) continue; // het vak "+ Doel toevoegen" (bewerkmodus)
     const on = checked.has(li.dataset.goal);
     li.classList.toggle('checked', on);
-    li.querySelector('.sr-only').textContent = on ? ' (afgevinkt)' : ' (nog niet afgevinkt)';
+    li.querySelector('.sr-only').textContent = on ? '(x) ' : '';
     if (on && drawIds.includes(li.dataset.goal)) {
       animate(li.querySelector('.goal-check path'), [
         { strokeDashoffset: 60 },
@@ -952,8 +951,8 @@ els.tipInput.addEventListener('blur', () => { if (!els.tipForm.hidden) submitTip
 // keer (doffe tik). Nog eens klikken op hetzelfde steekwoord of Esc haalt hem weg (zonder
 // geluid); een ander steekwoord aanklikken verplaatst hem. Elke andere verandering (een klik,
 // een ander vel, een ander formaat van het venster) haalt hem meteen weg. Voor schermlezers staat
-// achter het aangewezen steekwoord "(aangewezen)", net als de toestand van de doelen, en wordt het
-// aanwijzen voorgelezen. Niet in de bewerkmodus: daar opent een klik op het vel het tekstvak.
+// vóór het aangewezen steekwoord "(x)", net als bij een afgevinkt doel; het aanwijzen zelf wordt
+// niet voorgelezen. Niet in de bewerkmodus: daar opent een klik op het vel het tekstvak.
 
 let pointed = null; // { li, el } zolang er iets wordt aangewezen
 
@@ -965,7 +964,6 @@ function pointAt(li) {
   const style = getComputedStyle(li);
   // De dop komt net links van de stip of het nummer, op het midden van de eerste regel.
   const firstLine = parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2; // lineHeight in px
-  const text = li.textContent;
   const x = (r.left - stage.left) / scale - 6;
   const y = (r.top - stage.top) / scale + (Number.isFinite(firstLine) ? firstLine : r.height / scale / 2);
   const el = document.createElement('div');
@@ -977,8 +975,8 @@ function pointAt(li) {
   els.stage.append(el);
   const state = document.createElement('span');
   state.className = 'sr-only pointer-state';
-  state.textContent = ' (aangewezen)';
-  li.append(state);
+  state.textContent = '(x) ';
+  li.prepend(state);
   pointed = { li, el };
   animate(el, [
     { transform: 'translate(-90px, 6px) rotate(-14deg)', opacity: 0 },
@@ -986,7 +984,6 @@ function pointAt(li) {
     { transform: 'translate(0, 0) rotate(-8deg)', opacity: 1 },
   ], { duration: 380, easing: 'cubic-bezier(.2,.7,.3,1)' });
   setTimeout(() => { if (pointed?.el === el) playTap(); }, 280); // op het moment van de tik
-  announcePointer(text);
 }
 
 /** Haalt de aanwijzer weg; met animated glijdt hij snel terug (zonder geluid). */
@@ -1000,12 +997,6 @@ function hidePointer(animated) {
     { transform: 'translate(0, 0) rotate(-8deg)', opacity: 1 },
     { transform: 'translate(-70px, 4px) rotate(-12deg)', opacity: 0 },
   ], { duration: 170, easing: 'ease-in' }, () => el.remove());
-}
-
-function announcePointer(text) {
-  const el = els.pointerAnnouncer;
-  el.textContent = '';
-  setTimeout(() => { el.textContent = 'Aangewezen: ' + text; }, 50);
 }
 
 if (!editMode) {
@@ -1047,8 +1038,8 @@ function openTextEditor({ host, className = '', label, textLabel, text, help, on
     <textarea class="sheet-editor-text" aria-describedby="text-editor-help"></textarea>
     <p class="sheet-editor-help" id="text-editor-help"></p>
     <div class="sheet-editor-buttons">
-      <button type="button" data-action="cancel" title="Wijzigingen weggooien (Esc)">Annuleren</button>
-      <button type="button" data-action="save" class="primary" title="Opslaan (Ctrl+Enter)">Opslaan</button>
+      <button type="button" data-action="cancel" aria-keyshortcuts="Escape" title="Wijzigingen weggooien (Esc)">Annuleren</button>
+      <button type="button" data-action="save" class="primary" aria-keyshortcuts="Control+Enter Meta+Enter" title="Opslaan (Ctrl+Enter)">Opslaan</button>
     </div>`;
   box.querySelector('.sheet-editor-help').innerHTML = help.join('<br>');
   const input = box.querySelector('textarea');
