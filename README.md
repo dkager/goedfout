@@ -293,7 +293,7 @@ De bedieningsbalk blijft op het afsluitscherm altijd zichtbaar, rechtsonder, nu 
 
 ### Het wachtwoordscherm
 
-Voordat de presentatie opent, zie je op dezelfde beige achtergrond een witte kaart in het midden van het scherm. Daarop staat de titel "Presentatie" in blauwe markerletters, de zin "Voer het wachtwoord in om de presentatie te openen.", een invoerveld voor het wachtwoord en een blauwe knop "Openen". Bij een fout wachtwoord verschijnt daaronder in rood "Onjuist wachtwoord." Na het juiste wachtwoord volgt het startscherm.
+Voordat de presentatie opent, zie je een donker scherm, net als het start- en afsluitscherm: bijna zwart met in het midden een iets lichtere gloed. Midden op het scherm staat een donkere kaart met afgeronde hoeken en een dun lichtgrijs randje. Daarop staat de titel "PRESENTATIE" in grote, vette, bijna witte hoofdletters met ruime letterafstand, de zin "Voer het wachtwoord in om de presentatie te openen." in grijs, een donker invoerveld voor het wachtwoord en een felgroene knop "Openen" met donkere tekst. Bij een fout wachtwoord verschijnt daaronder in zachtrood "Onjuist wachtwoord." Na het juiste wachtwoord volgt het startscherm.
 
 ### Wat een schermlezer meekrijgt
 

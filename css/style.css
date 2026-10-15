@@ -38,34 +38,45 @@ body {
 }
 [hidden] { display: none !important; }
 
-/* ---------- Wachtwoordscherm ---------- */
+/* ---------- Wachtwoordscherm (donker, net als het start- en afsluitscherm) ---------- */
 .login {
   position: fixed; inset: 0;
   display: grid; place-items: center;
-  background: radial-gradient(circle at 50% 35%, var(--wall), var(--wall-dark));
   padding: 16px;
+  background: radial-gradient(ellipse at 50% 40%, #1b1f24 0%, var(--end-bg) 70%);
+  color: var(--end-text);
+  font-family: var(--ui);
+  color-scheme: dark; /* ook de onderdelen van de browser zelf (zoals het oogje in het wachtwoordveld) donker */
 }
 .login-card {
   width: min(380px, 100%);
-  background: var(--paper);
   padding: 32px 28px 24px;
-  border-radius: 4px;
-  box-shadow: 0 18px 40px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.1);
+  border: 1px solid rgba(255,255,255,.08); border-radius: 14px;
+  background: rgba(255,255,255,.04);
+  box-shadow: 0 18px 40px rgba(0,0,0,.45);
   display: flex; flex-direction: column; gap: 12px;
 }
-.login-card h1 { margin: 0; font-family: var(--marker); font-weight: 400; font-size: 34px; color: var(--ink-blue); }
-.login-card p { margin: 0; color: #555; font-size: 15px; line-height: 1.4; }
+.login-card h1 {
+  margin: 0 0 4px; font-size: 30px; font-weight: 800; line-height: 1.1;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--end-text);
+}
+.login-card p { margin: 0; color: var(--end-muted); font-size: 15px; line-height: 1.4; }
 .login-card input {
   font: inherit; font-size: 16px; padding: 11px 12px;
-  border: 1.5px solid #c9c2b5; border-radius: 4px; background: #fff;
+  border: 1.5px solid rgba(255,255,255,.18); border-radius: 8px;
+  background: rgba(255,255,255,.06); color: var(--end-text);
 }
-.login-card input:focus { outline: 2px solid var(--ink-blue); outline-offset: 1px; border-color: transparent; }
+.login-card input::placeholder { color: var(--end-muted); opacity: .8; }
+.login-card input:focus { outline: 2px solid var(--end-accent); outline-offset: 1px; border-color: transparent; }
 .login-card button {
-  font: inherit; font-size: 16px; font-weight: 600; padding: 11px;
-  border: 0; border-radius: 4px; background: var(--ink-blue); color: #fff; cursor: pointer;
+  font: inherit; font-size: 16px; font-weight: 700; padding: 11px;
+  border: 0; border-radius: 8px; background: var(--end-accent); color: var(--end-on-accent); cursor: pointer;
+  transition: background .15s;
 }
+.login-card button:hover { background: var(--end-accent-hover); }
+.login-card button:focus-visible { outline: 3px solid var(--end-text); outline-offset: 3px; }
 .login-card button:disabled { opacity: .6; cursor: progress; }
-.login-error { color: var(--ink-red) !important; min-height: 1.2em; font-size: 14px !important; }
+.login-error { color: #ff8a80 !important; min-height: 1.2em; font-size: 14px !important; }
 
 /* ---------- Podium ---------- */
 .viewport { position: fixed; inset: 0; overflow: hidden; background: var(--wall); }
@@ -583,13 +594,16 @@ body {
 
 /* ---------- Start- en afsluitscherm (donkere modus) ---------- */
 /* Contrast op --end-bg: titel 16:1, toelichting 8,4:1, knoptekst op de knop 8,5:1 */
-.dark-screen {
+/* Kleuren van de donkere schermen: wachtwoord, start en einde */
+.login, .dark-screen {
   --end-bg: #121417;
   --end-text: #eceff1;
   --end-muted: #a7b0b8;
   --end-accent: #3ccf7e;
   --end-accent-hover: #5fdc96;
   --end-on-accent: #0d1f14;
+}
+.dark-screen {
   position: fixed; inset: 0; z-index: 40;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 40px; padding: 24px;
