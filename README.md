@@ -292,7 +292,7 @@ In de bewerkmodus is "Vel bewerken" een echte knop met als sneltoets E; "Werkafs
 Wat er nog niet is:
 
 - Nieuwe steekwoorden, het verschuiven van geeltjes en de voortgang ("2 / 6") worden niet automatisch voorgelezen.
-- De knoppen vorige, volgende en volledig scherm in de bedieningsbalk zijn tekens (pijlen en een kadertje) met alleen een beschrijving als tooltip, geen echte naam. "Start", "Einde", "Werkafspraken", "Vel bewerken" en "Werkafspraken bewerken" hebben wel een echte naam.
+- De knoppen vorige en volgende in de bedieningsbalk zijn pijlen met alleen een beschrijving als tooltip, geen echte naam. "Start", "Einde", "Werkafspraken", "Volledig scherm" (het kadertje), "Vel bewerken" en "Werkafspraken bewerken" hebben wel een echte naam; die met een sneltoets (W, F, E en A) melden die sneltoets ook aan een schermlezer.
 - Een aantal dingen bestaat alleen in de opmaak en wordt dus niet als tekst doorgegeven: het rode plusteken bij een tijdens de presentatie toegevoegde tip, de kleuren, het inspringen en de lijnen tussen steekwoorden. De nummers bij genummerde steekwoorden komen ook uit de opmaak; of een schermlezer die voorleest, verschilt per schermlezer.
 
 ## Goed om te weten
