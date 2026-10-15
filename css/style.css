@@ -615,6 +615,18 @@ body {
   text-wrap: balance;
 }
 .dark-subtitle[hidden] { display: none; }
+/* Bewerkmodus: de titel van de presentatie is aanklikbaar en wordt dan een invoerveld (zie editInPlace) */
+.edit-mode .dark-subtitle { cursor: text; border-radius: 6px; padding: 0 .25em; }
+.edit-mode .dark-subtitle:hover { background: rgba(255,255,255,.08); }
+.edit-mode .dark-subtitle:focus-visible { outline: 3px solid var(--end-text); outline-offset: 4px; }
+.presentation-title-edit {
+  width: min(28em, calc(100vw - 48px)); margin: 0; padding: 0 .25em;
+  border: 0; border-bottom: 2.5px dashed var(--end-muted); border-radius: 0;
+  background: rgba(255,255,255,.08); color: var(--end-text);
+  font: 500 clamp(20px, 3.6vmin, 36px)/1.3 var(--ui); text-align: center;
+}
+.presentation-title-edit:focus { outline: none; border-bottom-color: var(--end-accent); }
+.presentation-title-edit::selection { background: var(--end-accent); color: var(--end-on-accent); }
 .end-download { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .end-download[hidden] { display: none; }
 .end-download-link {

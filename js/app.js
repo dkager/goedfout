@@ -29,6 +29,7 @@ const els = {
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
   keywordTitle: $('#keyword-title'),
+  startSubtitle: $('#start-subtitle'),
   agreements: $('#agreements-list'),
   goals: $('#goals-list'),
   agreementsBox: $('#agreements'),
@@ -67,6 +68,7 @@ let stickies = [];        // knop-elementen, index = onderwerp
 let stickyFontPx = 22;    // maximale lettergrootte op een geeltje, gezet door buildStickies()
 let scale = 1;
 let generation = 0;       // verhoogd bij elke navigatie; oude animatiestappen stoppen dan
+let loadedTitle = '';      // de titel van de presentatie zoals geladen, om een wijziging te herkennen
 let loadedGoals = '[]';     // de doelen zoals geladen (JSON), om wijzigingen te herkennen
 let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafspraken), zolang het open is (zie openTextEditor)
 // Wijzigingen (alleen in het geheugen) gaan direct in het model: tips die tijdens de presentatie
@@ -135,9 +137,12 @@ function start(raw) {
   deck = content;
   document.title = deck.title;
   // De titel uit de JSON ook op het startscherm, onder "WELKOM" (zonder title in de JSON: niets).
-  const subtitle = $('#start-subtitle');
+  // In de bewerkmodus altijd, zodat hij te bewerken is (zonder titel in de JSON: "Presentatie").
+  const subtitle = els.startSubtitle;
   subtitle.textContent = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (editMode && !subtitle.textContent) subtitle.textContent = deck.title;
   subtitle.hidden = subtitle.textContent === '';
+  loadedTitle = deck.title;
 
   rebuildFlat();
   for (const topic of deck.topics) for (const sheet of topic.sheets) originalSheets.set(sheet, sheet.title);
@@ -1028,20 +1033,18 @@ function saveSheet(text) {
 }
 
 /**
- * De titel van het huidige vel bewerken, op zijn plek. Enter of wegklikken slaat op, Esc
- * annuleert. Een vel heeft altijd een titel: leeg opslaan geldt als annuleren. Bij een nieuw vel
- * (addSheet) volgt daarna onDone, of bij annuleren (Esc of leeg) onCancel.
+ * Maakt van een titel op zijn plek een invoerveld (de titel van een vel, of die van de
+ * presentatie op het startscherm). Enter of wegklikken slaat op, Esc annuleert; een titel is
+ * verplicht, dus leeg opslaan geldt als annuleren. onSave(waarde) volgt alleen bij een andere,
+ * niet-lege waarde; daarna onDone. Bij annuleren onCancel (als die er is), anders blijft alles zo.
  */
-function editTitle({ onDone, onCancel } = {}) {
-  if (!editMode || textEditor || !isContent(pos) || els.keywordTitle.hidden) return;
-  finishAllAnimations();
-  const f = flat[pos.sheet];
-  const heading = els.keywordTitle;
+function editInPlace(el, { label, className, onSave, onDone, onCancel }) {
+  const original = el.textContent;
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = 'title-edit';
-  input.value = f.title;
-  input.setAttribute('aria-label', 'Titel van het vel');
+  input.className = className;
+  input.value = original;
+  input.setAttribute('aria-label', label);
   let done = false;
   const finish = (save) => {
     if (done) return;
@@ -1049,16 +1052,12 @@ function editTitle({ onDone, onCancel } = {}) {
     const value = input.value.replace(/\s+/g, ' ').trim();
     const refocus = document.activeElement === input;
     input.remove();
-    heading.hidden = false;
-    if (onCancel && !(save && value)) return onCancel();
-    if (save && value && value !== f.title) {
-      f.title = value;
-      deck.topics[f.topic].sheets[f.sheet].title = value;
-      heading.textContent = titleAt(pos);
-      fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20); // de titel kan langer of korter zijn
-    }
-    if (refocus) heading.focus({ preventScroll: true });
-    onDone?.();
+    el.hidden = false;
+    const kept = save && value !== '';
+    if (!kept && onCancel) return onCancel();
+    if (kept && value !== original) onSave(value);
+    if (refocus) el.focus({ preventScroll: true });
+    if (kept) onDone?.();
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') finish(true);
@@ -1068,11 +1067,47 @@ function editTitle({ onDone, onCancel } = {}) {
     e.stopPropagation();
   });
   input.addEventListener('blur', () => finish(true));
-  input.addEventListener('click', (e) => e.stopPropagation()); // niet ook het tekstvak van het vel openen
-  heading.hidden = true;
-  heading.after(input);
+  input.addEventListener('click', (e) => e.stopPropagation()); // niet ook wat eronder ligt openen
+  el.hidden = true;
+  el.after(input);
   input.focus({ preventScroll: true });
   input.select();
+}
+
+/**
+ * De titel van het huidige vel bewerken, op zijn plek (zie editInPlace). Bij een nieuw vel
+ * (addSheet) volgt daarna onDone, of bij annuleren (Esc of leeg) onCancel.
+ */
+function editTitle({ onDone, onCancel } = {}) {
+  if (!editMode || textEditor || !isContent(pos) || els.keywordTitle.hidden) return;
+  finishAllAnimations();
+  const f = flat[pos.sheet];
+  editInPlace(els.keywordTitle, {
+    label: 'Titel van het vel',
+    className: 'title-edit',
+    onDone,
+    onCancel,
+    onSave: (value) => {
+      f.title = value;
+      deck.topics[f.topic].sheets[f.sheet].title = value;
+      els.keywordTitle.textContent = titleAt(pos);
+      fitList(els.keywordSheet, els.keywordList, LIST_FONT_MAX, 20); // de titel kan langer of korter zijn
+    },
+  });
+}
+
+/** De titel van de presentatie bewerken, op het startscherm onder "WELKOM" (zie editInPlace). */
+function editPresentationTitle() {
+  if (!editMode || !isStart(pos) || els.startSubtitle.hidden) return;
+  editInPlace(els.startSubtitle, {
+    label: 'Titel van de presentatie',
+    className: 'presentation-title-edit',
+    onSave: (value) => {
+      deck.title = value;
+      document.title = value;
+      els.startSubtitle.textContent = value;
+    },
+  });
 }
 
 /* ---------- Vellen toevoegen en verwijderen (?edit) ---------- */
@@ -1264,6 +1299,17 @@ if (editMode) {
   els.agreementsBox.addEventListener('click', () => openAgreementsEditor());
   els.keywordSheet.addEventListener('click', () => openSheetEditor());
   // De titel: klikken of (met het toetsenbord) Enter bewerkt alleen de titel.
+  // De titel van de presentatie op het startscherm: net zo.
+  const subtitle = els.startSubtitle;
+  subtitle.tabIndex = 0;
+  subtitle.title = 'Titel bewerken (klik of Enter)';
+  subtitle.addEventListener('click', () => editPresentationTitle());
+  subtitle.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    editPresentationTitle();
+  });
   const heading = els.keywordTitle;
   heading.tabIndex = 0;
   heading.title = 'Titel bewerken (klik of Enter)';
@@ -1824,6 +1870,7 @@ function updateDownload() {
   if (removed) parts.push(count(removed, 'verwijderd'));
   if (agreementsChanged()) parts.push('de werkafspraken gewijzigd');
   if (goalsChanged()) parts.push('de doelen gewijzigd');
+  if (deck.title !== loadedTitle) parts.push('de titel van de presentatie gewijzigd');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
   els.endNote.textContent = `Je hebt ${list}. `
     + 'Dit bestand is onversleuteld: zet het in de projectmap, versleutel het opnieuw en verwijder de download.';
@@ -1852,6 +1899,7 @@ function contentWithChanges() {
   });
   if (agreementsChanged()) copy.agreements = [...deck.agreements];
   if (goalsChanged()) copy.goals = deck.goals.map((g) => ({ id: g.id, text: g.text }));
+  if (deck.title !== loadedTitle) copy.title = deck.title;
   return copy;
 }
 
