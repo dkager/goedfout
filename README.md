@@ -13,6 +13,7 @@ Alles draait in de browser: geen server, geen build-stap, geen afhankelijkheden.
 | Bestand | Wat | In git? |
 |---|---|---|
 | `index.html`, `css/`, `js/` | De motor | Ja |
+| `fonts/` | Lettertypen met hun licenties | Ja |
 | `content.example.json` | Voorbeeldinhoud | Ja (niet gevoelig) |
 | `content.json` | **Jouw echte inhoud, onversleuteld** | **Nee** (staat in `.gitignore`) |
 | `content.enc.json` | Versleutelde inhoud, wordt door de motor geladen | Ja |
@@ -330,6 +331,6 @@ Wat er nog niet is:
 - **Hoeveel past er?** Lettergroottes passen zich automatisch aan, maar dit blijft goed leesbaar: hooguit 4 doelen van hooguit 100 tekens (korter leest prettiger), hooguit 6 onderwerpen (daarboven worden de geeltjes te klein), zo'n 15 korte tips in totaal en ongeveer 10 steekwoorden per vel (de titel neemt bovenaan ook ruimte in; houd hem kort, liefst één of twee regels). Past een flip-over zelfs met de kleinste letters niet meer, dan meldt de console dat (handig tijdens het voorbereiden met `?plain`). Lange losse woorden op een geeltje worden kleiner dan korte.
 - **Nooit `content.json` committen.** De git-geschiedenis bewaart alles, ook als je het later verwijdert.
 - **Eén gedeeld wachtwoord.** Na een wachtwoordwissel blijven oude versies in de git-geschiedenis te ontsleutelen met het oude wachtwoord.
-- **Lettertypen** komen van Google Fonts (Caveat en Permanent Marker). Wil je dat bezoekers niets naar Google sturen, host ze dan zelf in een map `fonts/` en vervang de `<link>` in `index.html` door `@font-face`-regels.
+- **Lettertypen** (Caveat en Permanent Marker) staan zelf gehost in `fonts/`, met hun licentie (SIL Open Font License 1.1 en Apache License 2.0). De presentatie werkt dus ook zonder internet (lokaal via `npx serve .`), en bezoekers sturen niets naar Google. Alleen de tekens van Latin en Latin Extended zitten erin; andere schriften vallen terug op een standaardletter.
 - **De motor gebruikt de Web Crypto API.** Die werkt alleen via HTTPS of `localhost`; GitHub Pages gebruikt standaard HTTPS. Een bestand dat je direct opent (`file://`) werkt niet, omdat de browser de inhoud dan niet mag laden.
 - **Nog niet gebouwd:** PDF-export en sprekersnotities.
