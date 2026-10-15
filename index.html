@@ -94,6 +94,8 @@
             <button type="button" class="move-btn move-earlier" id="btn-sheet-earlier" aria-label="Eerder" hidden>◀</button>
             <button type="button" class="move-btn move-later" id="btn-sheet-later" aria-label="Later" hidden>▶</button>
             <ul class="sheet-list keyword-list" id="keyword-list"></ul>
+            <!-- Voorleesregel: "Aangewezen: …" als er op een steekwoord wordt geklikt (zie pointAt in app.js) -->
+            <p class="sr-only" id="pointer-announcer" aria-live="polite"></p>
           </div>
         </div>
         <div class="easel-legs"><span></span><span></span><span></span></div>

@@ -756,3 +756,20 @@ body {
 #keyword-sheet .move-btn { top: 40px; width: 22px; height: 22px; font-size: 11px; }
 #keyword-sheet .move-earlier { left: 2px; }
 #keyword-sheet .move-later { right: 2px; }
+
+/* ---------- Aanwijzen (live, zie pointAt in app.js) ---------- */
+/* Steekwoorden zijn aanklikbaar (niet in de bewerkmodus: daar opent een klik het tekstvak) */
+html:not(.edit-mode) .keyword-list li { cursor: pointer; }
+/* Een gesloten stift, groter dan die in de pennenbak, met de dop naar rechts: de punt van de dop
+   ligt op (left, top). Blauw: de standaardkleur van steekwoorden. */
+.pointer {
+  position: absolute; z-index: 30; width: 0; height: 0;
+  transform: rotate(-8deg); transform-origin: 0 0;
+  pointer-events: none;
+  filter: drop-shadow(2px 5px 4px rgba(0,0,0,.25));
+}
+.pointer-marker {
+  --c: var(--marker-blue);
+  left: auto; right: 6px; top: 0;
+  transform: translateY(-50%) scale(1.55); transform-origin: right center;
+}

@@ -29,6 +29,7 @@ const els = {
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
   keywordTitle: $('#keyword-title'),
+  pointerAnnouncer: $('#pointer-announcer'),
   startSubtitle: $('#start-subtitle'),
   agreements: $('#agreements-list'),
   goals: $('#goals-list'),
@@ -374,6 +375,7 @@ function goTo(target) {
 
 function render(previous) {
   const my = ++generation;
+  hidePointer(false); // elke verandering haalt de aanwijzer weg
   finishAllAnimations();
   cancelQueuedSounds();
   const animate = previous !== null;
@@ -924,6 +926,75 @@ els.tipInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); closeTipForm(); }
 });
 els.tipInput.addEventListener('blur', () => { if (!els.tipForm.hidden) submitTip(); });
+
+/* ---------- Aanwijzen (live) ---------- */
+// Klik op een steekwoord op de rechter flip-over: van links komt een gesloten blauwe stift in
+// beeld (de standaardkleur van steekwoorden), met de dop bij de stip van die regel, en tikt één
+// keer (doffe tik). Nog eens klikken op hetzelfde steekwoord of Esc haalt hem weg (zonder
+// geluid); een ander steekwoord aanklikken verplaatst hem. Elke andere verandering (een klik,
+// een ander vel, een ander formaat van het venster) haalt hem meteen weg. Voor schermlezers staat
+// achter het aangewezen steekwoord "(aangewezen)", net als de toestand van de doelen, en wordt het
+// aanwijzen voorgelezen. Niet in de bewerkmodus: daar opent een klik op het vel het tekstvak.
+
+let pointed = null; // { li, el } zolang er iets wordt aangewezen
+
+function pointAt(li) {
+  if (pointed?.li === li) return hidePointer(true);
+  hidePointer(false);
+  const r = li.getBoundingClientRect();
+  const stage = els.stage.getBoundingClientRect();
+  const style = getComputedStyle(li);
+  // De dop komt net links van de stip of het nummer, op het midden van de eerste regel.
+  const firstLine = parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2; // lineHeight in px
+  const text = li.textContent;
+  const x = (r.left - stage.left) / scale - 6;
+  const y = (r.top - stage.top) / scale + (Number.isFinite(firstLine) ? firstLine : r.height / scale / 2);
+  const el = document.createElement('div');
+  el.className = 'pointer';
+  el.setAttribute('aria-hidden', 'true');
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.innerHTML = '<i class="marker pointer-marker"></i>';
+  els.stage.append(el);
+  const state = document.createElement('span');
+  state.className = 'sr-only pointer-state';
+  state.textContent = ' (aangewezen)';
+  li.append(state);
+  pointed = { li, el };
+  animate(el, [
+    { transform: 'translate(-90px, 6px) rotate(-14deg)', opacity: 0 },
+    { transform: 'translate(3px, 0) rotate(-8deg)', opacity: 1, offset: 0.75 },   // tik tegen het papier
+    { transform: 'translate(0, 0) rotate(-8deg)', opacity: 1 },
+  ], { duration: 380, easing: 'cubic-bezier(.2,.7,.3,1)' });
+  setTimeout(() => { if (pointed?.el === el) playTap(); }, 280); // op het moment van de tik
+  announcePointer(text);
+}
+
+/** Haalt de aanwijzer weg; met animated glijdt hij snel terug (zonder geluid). */
+function hidePointer(animated) {
+  if (!pointed) return;
+  const { li, el } = pointed;
+  pointed = null;
+  li.querySelector('.pointer-state')?.remove();
+  if (!animated) return el.remove();
+  animate(el, [
+    { transform: 'translate(0, 0) rotate(-8deg)', opacity: 1 },
+    { transform: 'translate(-70px, 4px) rotate(-12deg)', opacity: 0 },
+  ], { duration: 170, easing: 'ease-in' }, () => el.remove());
+}
+
+function announcePointer(text) {
+  const el = els.pointerAnnouncer;
+  el.textContent = '';
+  setTimeout(() => { el.textContent = 'Aangewezen: ' + text; }, 50);
+}
+
+if (!editMode) {
+  els.keywordList.addEventListener('click', (e) => {
+    const li = e.target.closest('li');
+    if (li && isContent(pos)) pointAt(li);
+  });
+}
 
 /* ---------- Bewerken (?edit) ---------- */
 // Klik op de rechter flip-over (of de knop "Vel bewerken", of E): alle klikken van het vel
@@ -1623,6 +1694,45 @@ const playPageTurn = () => queueSound(pageTurnSound, 0.55);
 const playCheck = () => queueSound(checkSound, 0.34);
 const playPickup = () => playIfQuiet(pickupSound, 0.18);
 const playStick = () => playIfQuiet(stickSound, 0.09);
+const playTap = () => playIfQuiet(tapSound, 0.07);
+
+/**
+ * Doffe tik van de dop van een stift tegen het papier op de flip-over (bij aanwijzen). Gedempt:
+ * ruis door een laagdoorlaatfilter met een korte, zakkende toon eronder; rond 500–900 Hz, zodat
+ * hij ook op laptopspeakers te horen is.
+ */
+function tapSound() {
+  try {
+    const ctx = getAudio();
+    const now = ctx.currentTime;
+    const knock = noiseSource(ctx, 0.05);
+    const low = ctx.createBiquadFilter();
+    low.type = 'lowpass';
+    low.frequency.value = 950;
+    low.Q.value = 0.8;
+    const knockEnv = ctx.createGain();
+    knockEnv.gain.setValueAtTime(0.0001, now);
+    knockEnv.gain.exponentialRampToValueAtTime(0.32, now + 0.002);
+    knockEnv.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+    knock.connect(low).connect(knockEnv).connect(ctx.destination);
+    knock.start(now);
+    knock.stop(now + 0.05);
+
+    const body = ctx.createOscillator();
+    body.type = 'sine';
+    body.frequency.setValueAtTime(560, now);
+    body.frequency.exponentialRampToValueAtTime(320, now + 0.05);
+    const bodyEnv = ctx.createGain();
+    bodyEnv.gain.setValueAtTime(0.0001, now);
+    bodyEnv.gain.exponentialRampToValueAtTime(0.14, now + 0.003);
+    bodyEnv.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+    body.connect(bodyEnv).connect(ctx.destination);
+    body.start(now);
+    body.stop(now + 0.07);
+  } catch (err) {
+    console.warn('Tikgeluid kon niet worden afgespeeld:', err);
+  }
+}
 
 /** Ruis van een bepaalde lengte, als bron voor geritsel en geeltjesgeluiden. */
 function noiseSource(ctx, seconds) {
@@ -1923,7 +2033,7 @@ function fitStage() {
   const y = overflow <= 0 ? -overflow / 2 : -Math.min(overflow / 2, SAFE_TOP * scale);
   els.stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
 }
-window.addEventListener('resize', () => { if (deck) fitStage(); });
+window.addEventListener('resize', () => { if (deck) { hidePointer(false); fitStage(); } });
 
 document.addEventListener('keydown', (e) => {
   if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
@@ -1937,6 +2047,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
   else if (isStart(pos)) return; // op het startscherm werken alleen Start en volledig scherm
   else if (e.key === 'w' || e.key === 'W') toggleAgreements();
+  else if (e.key === 'Escape' && pointed) hidePointer(true);
   else if (e.key === 'Escape' && !els.agreementsBox.hidden) toggleAgreements(false);
   // Home/End: eerste en laatste inhoud, niet het start- of afsluitscherm
   else if (e.key === 'Home') { e.preventDefault(); goTo(firstContent()); }
