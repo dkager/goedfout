@@ -52,7 +52,11 @@
           <ul class="wb-goals" id="goals-list" aria-label="Doelen" hidden></ul>
           <div class="kanban">
             <div class="kb-col" data-col="todo"><h3>To do</h3><div class="kb-cards" id="col-todo"></div></div>
-            <div class="kb-col" data-col="doing"><h3>Doing</h3><div class="kb-cards" id="col-doing"></div>
+            <div class="kb-col" data-col="doing"><h3>Doing</h3><div class="kb-cards" id="col-doing">
+                <!-- Alleen in de bewerkmodus: het huidige onderwerp een plek eerder of later -->
+                <button type="button" class="move-btn move-earlier" id="btn-topic-earlier" aria-label="Eerder" hidden>◀</button>
+                <button type="button" class="move-btn move-later" id="btn-topic-later" aria-label="Later" hidden>▶</button>
+              </div>
               <!-- Alleen in de bewerkmodus: onderwerp toevoegen (na het huidige) of het huidige verwijderen -->
               <div class="kb-edit" id="topic-tools" hidden>
                 <button type="button" id="btn-topic-add" aria-keyshortcuts="G">+ Onderwerp</button>
@@ -86,6 +90,9 @@
           <div class="sheet" id="keyword-sheet">
             <!-- Titel van het vel: altijd zichtbaar, ook als het vel verder nog leeg is -->
             <h2 class="sheet-title" id="keyword-title"></h2>
+            <!-- Alleen in de bewerkmodus: dit vel een plek eerder of later -->
+            <button type="button" class="move-btn move-earlier" id="btn-sheet-earlier" aria-label="Eerder" hidden>◀</button>
+            <button type="button" class="move-btn move-later" id="btn-sheet-later" aria-label="Later" hidden>▶</button>
             <ul class="sheet-list keyword-list" id="keyword-list"></ul>
           </div>
         </div>

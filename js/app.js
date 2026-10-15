@@ -37,6 +37,10 @@ const els = {
   agreementsEditBtn: $('#btn-agreements-edit'),
   addSheetBtn: $('#btn-sheet-add'),
   topicTools: $('#topic-tools'),
+  topicEarlier: $('#btn-topic-earlier'),
+  topicLater: $('#btn-topic-later'),
+  sheetEarlier: $('#btn-sheet-earlier'),
+  sheetLater: $('#btn-sheet-later'),
   addTopicBtn: $('#btn-topic-add'),
   deleteTopicBtn: $('#btn-topic-delete'),
   deleteSheetBtn: $('#btn-sheet-delete'),
@@ -64,7 +68,7 @@ const els = {
 
 let rawContent = null;    // de inhoud precies zoals geladen (nooit gewijzigd), voor de export
 let deck = null;          // het model: genormaliseerde kopie van de inhoud; wijzigingen gaan hierin
-let flat = [];            // [{ topic, sheet, title, steps: [[item, …], …] }] (dezelfde arrays als in deck)
+let flat = [];            // [{ topic, sheet, title, steps: [[item, …], …], model }] (steps en model: dezelfde als in deck)
 let firstSheetOfTopic = [];
 let pos = { sheet: 0, step: 0 };
 let stickies = [];        // knop-elementen, index = onderwerp
@@ -78,7 +82,7 @@ let textEditor = null;   // het tekstvak van de bewerkmodus (vel of werkafsprake
 // worden toegevoegd (type tip, user: true), en alles uit de bewerkmodus. De export schrijft de
 // vellen altijd uit het model (zie contentWithChanges). Voor de telling op het afsluitscherm:
 const original = new Map();        // item uit de inhoud → JSON zoals geladen (om bewerkingen te tellen)
-const originalSheets = new Map();  // vel uit de inhoud → titel zoals geladen (toegevoegd, verwijderd, hernoemd)
+const originalSheets = new Map();  // vel uit de inhoud → { title, order, topic } zoals geladen (toegevoegd, verwijderd, hernoemd, verplaatst)
 const originalTopics = new Map();  // onderwerp uit de inhoud → { index in de JSON, naam zoals geladen }
 const editMode = new URLSearchParams(location.search).has('edit');
 
@@ -150,7 +154,7 @@ function start(raw) {
 
   rebuildFlat();
   deck.topics.forEach((topic, t) => originalTopics.set(topic, { index: t, name: topic.sticky }));
-  for (const topic of deck.topics) for (const sheet of topic.sheets) originalSheets.set(sheet, sheet.title);
+  for (const f of flat) originalSheets.set(f.model, { title: f.title, order: originalSheets.size, topic: deck.topics[f.topic] });
   for (const f of flat) for (const step of f.steps) for (const item of step) original.set(item, JSON.stringify(item));
 
   // Werkafspraken (standaard verborgen; zonder afspraken ook geen knop)
@@ -182,7 +186,7 @@ function rebuildFlat() {
   firstSheetOfTopic = [];
   deck.topics.forEach((topic, t) => {
     firstSheetOfTopic[t] = flat.length;
-    topic.sheets.forEach((sheet, s) => flat.push({ topic: t, sheet: s, title: sheet.title, steps: sheet.steps }));
+    topic.sheets.forEach((sheet, s) => flat.push({ topic: t, sheet: s, title: sheet.title, steps: sheet.steps, model: sheet }));
   });
 }
 
@@ -489,6 +493,7 @@ function updateButtons() {
   els.agreementsBtn.disabled = !isContent(pos) || editing;
   els.agreementsEditBtn.disabled = !isContent(pos) || editing;
   els.addSheetBtn.disabled = !isContent(pos) || editing;
+  updateMoveButtons(editing);
   const full = deck.topics.length >= TOPICS_MAX;
   els.addTopicBtn.disabled = !isContent(pos) || editing || full;
   els.addTopicBtn.title = full ? `Er passen hooguit ${TOPICS_MAX} onderwerpen` : 'Nieuw onderwerp na dit onderwerp (G)';
@@ -1275,6 +1280,70 @@ function describeContent(steps, sheetCount = 0) {
   return head + (extra.length ? ', met ' + extra.join(' en ') : '');
 }
 
+/* ---------- Verplaatsen (?edit) ---------- */
+// Pijlen naast het geeltje in Doing verplaatsen het huidige onderwerp een plek eerder of later
+// (met al zijn vellen); de andere geeltjes schuiven mee tussen Done en To do. Pijlen bij de titel
+// van het vel verplaatsen het huidige vel binnen zijn onderwerp, en aan het begin of eind (na een
+// bevestiging) naar het vorige onderwerp (als laatste vel) of het volgende (als eerste). Alles
+// op het vel gaat mee. Je blijft op hetzelfde vel en dezelfde klik.
+
+function moveTopic(delta) {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  const t = flat[pos.sheet].topic;
+  const to = t + delta;
+  if (to < 0 || to >= deck.topics.length) return;
+  const sheet = flat[pos.sheet].model;
+  const step = pos.step;
+  deck.topics.splice(to, 0, ...deck.topics.splice(t, 1));
+  topicsUpdated();
+  pos = { sheet: flat.findIndex((f) => f.model === sheet), step };
+  render(null);
+  showNotice(`Onderwerp staat nu op plek ${to + 1} van ${deck.topics.length}.`);
+}
+
+function moveSheet(delta) {
+  if (!editMode || textEditor || !isContent(pos)) return;
+  const f = flat[pos.sheet];
+  const sheets = deck.topics[f.topic].sheets;
+  const step = pos.step;
+  const to = f.sheet + delta;
+  if (to >= 0 && to < sheets.length) {
+    sheets.splice(to, 0, ...sheets.splice(f.sheet, 1));
+  } else {
+    // Naar het vorige of volgende onderwerp; het enige vel van een onderwerp blijft.
+    const target = deck.topics[f.topic + delta];
+    if (!target || sheets.length === 1) return;
+    const earlier = delta < 0;
+    if (!confirm(`Vel „${f.title}” naar het ${earlier ? 'vorige' : 'volgende'} onderwerp „${target.sticky}” verplaatsen?\n\nHet komt daar als ${earlier ? 'laatste' : 'eerste'} vel.`)) return;
+    sheets.splice(f.sheet, 1);
+    if (earlier) target.sheets.push(f.model); else target.sheets.unshift(f.model);
+  }
+  rebuildFlat();
+  pos = { sheet: flat.findIndex((g) => g.model === f.model), step };
+  render(null);
+  const g = flat[pos.sheet];
+  const where = g.topic === f.topic ? '' : ` bij „${deck.topics[g.topic].sticky}”`;
+  showNotice(`Vel staat nu op plek ${g.sheet + 1} van ${deck.topics[g.topic].sheets.length}${where}.`);
+}
+
+/** Pijlen aan of uit, met in de tooltip waarom niet. */
+function updateMoveButtons(editing) {
+  const content = isContent(pos) && !editing;
+  const f = content ? flat[pos.sheet] : null;
+  const set = (button, enabled, title) => { button.disabled = !enabled; button.title = title; };
+  const lastTopic = deck.topics.length - 1;
+  set(els.topicEarlier, content && f.topic > 0, f && f.topic === 0 ? 'Dit is het eerste onderwerp' : 'Onderwerp een plek eerder');
+  set(els.topicLater, content && f.topic < lastTopic, f && f.topic === lastTopic ? 'Dit is het laatste onderwerp' : 'Onderwerp een plek later');
+  const count = f ? deck.topics[f.topic].sheets.length : 0;
+  const only = 'Het enige vel van dit onderwerp blijft hier';
+  const earlier = !f ? '' : f.sheet > 0 ? 'Vel een plek eerder'
+    : f.topic === 0 ? 'Dit is het eerste vel' : count === 1 ? only : 'Vel naar het vorige onderwerp (als laatste)';
+  const later = !f ? '' : f.sheet < count - 1 ? 'Vel een plek later'
+    : f.topic === lastTopic ? 'Dit is het laatste vel' : count === 1 ? only : 'Vel naar het volgende onderwerp (als eerste)';
+  set(els.sheetEarlier, content && (f.sheet > 0 || (f.topic > 0 && count > 1)), earlier);
+  set(els.sheetLater, content && (f.sheet < count - 1 || (f.topic < lastTopic && count > 1)), later);
+}
+
 /* ---------- Doelen bewerken (?edit) ---------- */
 // Klik op de tekst van een doel (of Tab ernaartoe en Enter): die wordt een invoerveld. Enter of
 // wegklikken slaat op, Esc annuleert. Leeg opslaan verwijdert het doel; wordt het ergens
@@ -1405,6 +1474,11 @@ if (editMode) {
   els.editBtn.addEventListener('click', () => openSheetEditor());
   els.addSheetBtn.hidden = false;
   els.topicTools.hidden = false;
+  for (const [button, act] of [[els.topicEarlier, () => moveTopic(-1)], [els.topicLater, () => moveTopic(1)],
+    [els.sheetEarlier, () => moveSheet(-1)], [els.sheetLater, () => moveSheet(1)]]) {
+    button.hidden = false;
+    button.addEventListener('click', (e) => { e.stopPropagation(); act(); }); // niet ook het tekstvak van het vel openen
+  }
   els.addTopicBtn.addEventListener('click', () => addTopic());
   els.deleteTopicBtn.addEventListener('click', () => deleteTopic());
   els.deleteSheetBtn.hidden = false;
@@ -1979,7 +2053,11 @@ function updateDownload() {
   const sheetsNow = deck.topics.flatMap((t) => t.sheets);
   const sheetsAdded = sheetsNow.filter((sh) => !originalSheets.has(sh)).length;
   const sheetsRemoved = [...originalSheets.keys()].filter((sh) => !sheetsNow.includes(sh)).length;
-  const titles = sheetsNow.filter((sh) => originalSheets.has(sh) && sh.title !== originalSheets.get(sh)).length;
+  const titles = sheetsNow.filter((sh) => originalSheets.has(sh) && sh.title !== originalSheets.get(sh).title).length;
+  const sorted = (list) => list.every((n, i) => i === 0 || list[i - 1] < n);
+  const topicOrder = !sorted(deck.topics.filter((t) => originalTopics.has(t)).map((t) => originalTopics.get(t).index));
+  const sheetOrder = !sorted(sheetsNow.filter((sh) => originalSheets.has(sh)).map((sh) => originalSheets.get(sh).order));
+  const sheetsMoved = deck.topics.flatMap((t) => t.sheets.filter((sh) => originalSheets.has(sh) && originalSheets.get(sh).topic !== t)).length;
   const sheetsCount = (n, what) => (n === 1 ? '1 vel ' : n + ' vellen ') + what;
   const topicsAdded = deck.topics.filter((t) => !originalTopics.has(t)).length;
   const topicsRemoved = [...originalTopics.keys()].filter((t) => !deck.topics.includes(t)).length;
@@ -1992,6 +2070,9 @@ function updateDownload() {
   if (sheetsAdded) parts.push(sheetsCount(sheetsAdded, 'toegevoegd'));
   if (sheetsRemoved) parts.push(sheetsCount(sheetsRemoved, 'verwijderd'));
   if (titles) parts.push(titles === 1 ? '1 veltitel gewijzigd' : titles + ' veltitels gewijzigd');
+  if (topicOrder) parts.push('de volgorde van de onderwerpen gewijzigd');
+  if (sheetOrder) parts.push('de volgorde van de vellen gewijzigd');
+  if (sheetsMoved) parts.push(sheetsCount(sheetsMoved, 'naar een ander onderwerp verplaatst'));
   if (added) parts.push(count(added, 'toegevoegd'));
   if (edited) parts.push(count(edited, 'bewerkt'));
   if (removed) parts.push(count(removed, 'verwijderd'));

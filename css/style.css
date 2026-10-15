@@ -733,3 +733,26 @@ body {
   font: 700 var(--sfont)/1 var(--hand); text-align: center;
 }
 .sticky-edit:focus { outline: none; }
+
+/* ---------- Verplaatsen (?edit): pijlen naast het geeltje in Doing en bij de titel van het vel ---------- */
+.move-btn {
+  position: absolute; z-index: 3;
+  width: 26px; height: 26px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  background: rgba(31,63,143,.1); color: var(--ink-blue);
+  font: 13px/1 var(--ui); cursor: pointer;
+}
+.move-btn[hidden] { display: none; }
+.move-btn:hover { background: rgba(31,63,143,.2); }
+.move-btn:focus-visible { outline: 3px solid var(--ink-blue); outline-offset: 2px; }
+.move-btn:disabled { cursor: default; color: rgba(31,63,143,.3); background: rgba(31,63,143,.04); }
+/* naast het geeltje in Doing, op halve hoogte */
+#col-doing { position: relative; }
+#col-doing .move-btn { top: calc(4px + var(--sh) / 2); transform: translateY(-50%); }
+#col-doing .move-earlier { left: calc(50% - var(--sw) / 2 - 36px); }
+#col-doing .move-later { right: calc(50% - var(--sw) / 2 - 36px); }
+/* in de marge van het vel, op de hoogte van de titel */
+#keyword-sheet .move-btn { top: 40px; width: 22px; height: 22px; font-size: 11px; }
+#keyword-sheet .move-earlier { left: 2px; }
+#keyword-sheet .move-later { right: 2px; }
