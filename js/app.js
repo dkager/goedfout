@@ -18,6 +18,7 @@ const LIST_FONT_MAX = 32; // px
 
 const $ = (sel) => document.querySelector(sel);
 const els = {
+  soundBtn: $('#btn-sound'),
   login: $('#login'),
   form: $('#login-form'),
   demoLink: $('#demo-link'),
@@ -1881,9 +1882,22 @@ if (editMode) {
 /* ---------- Geluid ---------- */
 // Met Web Audio opgewekt, dus geen geluidsbestanden nodig. De AudioContext wordt pas
 // bij het eerste geluid gemaakt: browsers staan geluid pas toe na een klik of toets.
-// In de bewerkmodus (?edit) klinkt nooit iets.
+// In de bewerkmodus (?edit) klinkt standaard niets; de knop met de luidspreker zet het geluid aan
+// (en weer uit). Live klinkt het altijd.
 
 let audio = null;
+let soundOn = !editMode;
+
+if (editMode) {
+  els.soundBtn.hidden = false;
+  els.soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    els.soundBtn.setAttribute('aria-pressed', String(soundOn));
+    els.soundBtn.title = soundOn ? 'Geluid uit' : 'Geluid aan (de bewerkmodus is standaard stil)';
+    if (soundOn) warmUpAudio(); // nu, tijdens de klik: browsers staan geluid pas toe na een handeling
+    else cancelQueuedSounds();
+  });
+}
 
 function getAudio() {
   audio ??= new AudioContext();
@@ -1895,7 +1909,7 @@ function getAudio() {
 // systeem opent het geluidsapparaat). Daarom vooraf, bij het inloggen of de eerste toets of klik,
 // en niet midden in een overgang. Browsers staan het pas toe na zo'n handeling van de gebruiker.
 function warmUpAudio() {
-  if (editMode || audio) return;
+  if (!soundOn || audio) return;
   try { getAudio(); } catch { /* zonder geluid gaat de presentatie gewoon door */ }
 }
 for (const type of ['pointerdown', 'keydown']) {
@@ -1918,7 +1932,7 @@ function startSound(play, seconds) {
 
 /** Hoofdgeluid: nu, of direct na wat er al klinkt. Geeft terug na hoeveel ms het klinkt. */
 function queueSound(play, seconds) {
-  if (editMode) return 0; // de bewerkmodus is stil
+  if (!soundOn) return 0; // de bewerkmodus is standaard stil
   const wait = Math.max(0, soundBusyUntil - performance.now());
   soundBusyUntil = performance.now() + wait + seconds * 1000 + SOUND_GAP;
   if (wait === 0) startSound(play, seconds);
@@ -1928,7 +1942,7 @@ function queueSound(play, seconds) {
 
 /** Klein geluidje bij een beweging: alleen als het stil is, anders vervalt het. */
 function playIfQuiet(play, seconds) {
-  if (editMode || performance.now() < soundBusyUntil) return;
+  if (!soundOn || performance.now() < soundBusyUntil) return;
   soundBusyUntil = performance.now() + seconds * 1000 + SOUND_GAP;
   startSound(play, seconds);
 }
@@ -1967,14 +1981,14 @@ function pinUpSound() {
   }
 }
 
-/** Weghalen: subtiel. Twee heel zachte tikjes (magneten eraf) en een nauwelijks hoorbare zwiep. */
+/** Weghalen: zachter dan ophangen, maar goed hoorbaar. Twee tikjes (magneten eraf) en een zachte zwiep. */
 function pinDownSound() {
   try {
     const ctx = getAudio();
     const now = ctx.currentTime;
-    magnetClick(ctx, now, 1.15, 0.12);
-    magnetClick(ctx, now + 0.07, 1.05, 0.1);
-    paperSwish(ctx, now + 0.14, 0.16, 0.03);
+    magnetClick(ctx, now, 1.15, 0.25);
+    magnetClick(ctx, now + 0.07, 1.05, 0.22);
+    paperSwish(ctx, now + 0.14, 0.17, 0.06);
   } catch (err) {
     console.warn('Weghaalgeluid kon niet worden afgespeeld:', err);
   }
@@ -2576,6 +2590,12 @@ function renderImagesList() {
     const n = used.has(name) ? pinCount(name) : 0;
     meta.textContent = [info?.uploaded ? 'geüpload' : '', n ? `${n}× opgehangen` : 'niet gebruikt', info?.ok ? `${info.w} × ${info.h}` : ''].filter(Boolean).join(' · ');
     copy.append(thumb, label, meta);
+    // Voor schermlezers: de code als naam, de rest (ontbreekt/laden… en de gegevens) als
+    // beschrijving; anders plakken de stukken zonder spatie aan elkaar ("@katgeüpload").
+    thumb.id = `image-thumb-${name}`;
+    meta.id = `image-meta-${name}`;
+    copy.setAttribute('aria-label', '@' + name);
+    copy.setAttribute('aria-describedby', (info?.ok ? '' : thumb.id + ' ') + meta.id);
     copy.addEventListener('click', () => copyImageCode(name));
     const del = document.createElement('button');
     del.type = 'button';

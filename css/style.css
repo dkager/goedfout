@@ -651,6 +651,12 @@ body {
   width: 30px; height: 28px; border: 0; border-radius: 14px;
   background: transparent; color: inherit; cursor: pointer;
 }
+/* Geluid aan/uit (bewerkmodus): luidspreker met golven (aan) of een kruisje (uit) */
+.sound-toggle { display: inline-grid; place-items: center; }
+.sound-toggle[hidden] { display: none; }
+.sound-toggle .sound-on { display: none; }
+.sound-toggle[aria-pressed="true"] .sound-on { display: inline; }
+.sound-toggle[aria-pressed="true"] .sound-off { display: none; }
 .controls button:hover { background: rgba(255,255,255,.15); }
 .controls button:disabled { opacity: .35; cursor: default; background: transparent; }
 .controls button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }

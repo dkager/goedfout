@@ -183,6 +183,14 @@
       <button id="btn-agreements" class="labeled" aria-pressed="false" aria-controls="agreements"
               aria-keyshortcuts="W" title="Werkafspraken tonen of verbergen (W)">Werkafspraken</button>
       <button id="btn-full" aria-label="Volledig scherm" aria-keyshortcuts="F" title="Volledig scherm (F)">⛶</button>
+      <!-- Alleen in de bewerkmodus (die is standaard stil): geluid aan of uit -->
+      <button id="btn-sound" class="sound-toggle" aria-label="Geluid" aria-pressed="false" title="Geluid aan (de bewerkmodus is standaard stil)" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/>
+          <path class="sound-on" d="M16 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7 7 0 0 1 0 10"/>
+          <path class="sound-off" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/>
+        </svg>
+      </button>
       <!-- Alleen met ?edit in de adresbalk -->
       <span id="edit-badge" class="edit-badge" hidden>✎ Bewerken</span>
       <!-- Alleen met ?demo in de adresbalk -->
