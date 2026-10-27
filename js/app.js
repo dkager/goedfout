@@ -28,9 +28,8 @@ const els = {
   stage: $('#stage'),
   tipsSheet: $('#tips-sheet'),
   tipsList: $('#tips-list'),
-  tipsAnnouncer: $('#tips-announcer'),
+  announcer: $('#announcer'),
   pinLayer: $('#pin-layer'),
-  pinAnnouncer: $('#pin-announcer'),
   keywordPad: $('#keyword-pad'),
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
@@ -160,6 +159,10 @@ els.form.addEventListener('submit', async (e) => {
 // Het loginscherm toont de link naar de demo, behalve in de bewerkmodus (de demo is altijd live).
 els.demoLink.hidden = editMode;
 if (demoMode) document.getElementById('demo-badge').hidden = false;
+
+// Het wachtwoordveld krijgt pas focus als het loginscherm echt getoond wordt (geen autofocus in de
+// HTML): in de demo zou een schermlezer anders bij het openen naar de invoermodus schakelen.
+if (!demoMode) els.password.focus();
 
 if (demoMode) {
   loadContent().then(start).catch((err) => { els.loginError.textContent = err.message; });
@@ -467,10 +470,15 @@ function render(previous) {
   if (previous !== null && question !== null) playQuestionTone();
   const tipsAdded = previous !== null && tipsAt(pos).length > tipsAt(previous).length;
   if (tipsAdded) playBell();
-  // Nieuwe tips voorlezen, alleen die van de huidige klik: een sprong naar een ander onderwerp
-  // begint op een leeg vel en leest dus niet alle tips van de tussenliggende vellen voor.
-  // Zonder nieuwe tips wordt de voorleesregel leeggemaakt.
-  announceTips(tipsAdded ? (currentStep(pos) ?? []).filter((it) => it.type === 'tip').map((it) => 'Tip: ' + it.text) : []);
+  // Voorlezen wat deze klik laat verschijnen, in één melding en in een vaste volgorde: de vraag,
+  // het blaadje, de nieuwe tips. Alleen de tips van de huidige klik: een sprong naar een ander
+  // onderwerp begint op een leeg vel en leest dus niet alle tips van de tussenliggende vellen voor.
+  // Zonder iets nieuws wordt de voorleesregel leeggemaakt.
+  announce([
+    previous !== null && question !== null ? question : null,
+    pinChanged && pinned ? 'Blaadje: ' + pinned.text : null,
+    ...(tipsAdded ? (currentStep(pos) ?? []).filter((it) => it.type === 'tip').map((it) => 'Tip: ' + it.text) : []),
+  ]);
   // Het vinkje wordt getekend op het moment dat het schrijfgeluid klinkt (dat kan na de andere zijn).
   const checkAt = newlyChecked.length ? playCheck() : 0;
   renderGoals(goalsDone, animate ? newlyChecked : [], checkAt);
@@ -643,6 +651,8 @@ function renderPin(item, animated, delay, force = false) {
   if (item === pinShown && !force) return;
   pinShown = item;
   const layer = els.pinLayer;
+  // Het gebied "Blaadje" bestaat alleen zolang er iets hangt (een leeg gebied is ruis voor schermlezers)
+  if (item) layer.setAttribute('role', 'region'); else layer.removeAttribute('role');
   const old = [...layer.querySelectorAll('.pin-paper:not(.leaving)')];
   const paper = item ? pinPaper(item) : null;
   if (!animated) {
@@ -665,8 +675,6 @@ function renderPin(item, animated, delay, force = false) {
       { opacity: 1, transform: 'translate(0, 0) scale(1)' },
     ], { duration: 110, delay: delay + 150 + i * 150, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'backwards' });
   });
-  els.pinAnnouncer.textContent = '';
-  setTimeout(() => { els.pinAnnouncer.textContent = 'Afbeelding: ' + item.text; }, 50);
 }
 
 /** Haalt een vel weg: eerst de magneten (een voor een), dan zakt het vel en verdwijnt. */
@@ -810,6 +818,7 @@ function buildGoals() {
   }
   els.goals.replaceChildren(...items);
   els.goals.hidden = items.length === 0;
+  document.getElementById('goals-region').hidden = items.length === 0; // geen doelen: ook geen gebied
   if (isContent(pos)) renderGoals(checkedGoalsAt(pos), [], 0);
 }
 
@@ -866,13 +875,16 @@ function renderTips(animate) {
 }
 
 /**
- * Laat een schermlezer nieuwe tips voorlezen (de voorleesregel is een aria-live-regio). Eerst
+ * Laat een schermlezer voorlezen wat er verschijnt (de voorleesregel is een aria-live-regio), als
+ * één melding: losse meldingen kort na elkaar breken elkaar af. Lege delen vallen weg; een deel
+ * zonder leesteken aan het eind krijgt een punt, zodat de schermlezer er een pauze houdt. Eerst
  * leegmaken en pas daarna vullen, zodat ook dezelfde tekst nog eens wordt voorgelezen.
  */
-function announceTips(texts) {
-  const el = els.tipsAnnouncer;
+function announce(parts) {
+  const el = els.announcer;
+  const text = parts.filter(Boolean).map((p) => (/[.?!…]$/.test(p) ? p : p + '.')).join(' ');
   el.textContent = '';
-  if (texts.length) setTimeout(() => { el.textContent = texts.join(' '); }, 50);
+  if (text) setTimeout(() => { el.textContent = text; }, 50);
 }
 
 /**
@@ -1165,7 +1177,7 @@ function submitTip() {
   else steps[pos.step - 1].push(item);
   finishAllAnimations();
   playBell();
-  announceTips(['Tip toegevoegd: ' + text]);
+  announce(['Tip toegevoegd: ' + text]);
   renderTips(true);
   updateHash();
   updateButtons();

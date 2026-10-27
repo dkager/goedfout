@@ -578,6 +578,10 @@ body {
 /* Het vlak boven de vraagzone: van de bovenrand van het schrijfvlak tot net boven de stippellijn
    (680 - 18 onderpadding - 150 vraagzone - 10 marge = 502). Boven de geeltjes (die schuiven op
    z-index 20), onder de werkafspraken (40). */
+/* Omhulling van de doelen voor het gebied "Doelen": geen eigen vak in de opmaak */
+.wb-region { display: contents; }
+.wb-region[hidden] { display: none; }
+
 .pin-layer {
   position: absolute; left: 0; right: 0; top: 0; height: 502px; z-index: 30;
   display: grid; place-items: center;

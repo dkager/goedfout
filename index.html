@@ -18,7 +18,7 @@
     <form id="login-form" class="login-card" autocomplete="off">
       <h1>Presentatie</h1>
       <p>Voer het wachtwoord in om de presentatie te openen.</p>
-      <input id="password" type="password" placeholder="Wachtwoord" autofocus required>
+      <input id="password" type="password" placeholder="Wachtwoord" required>
       <button type="submit">Openen</button>
       <p id="login-error" class="login-error" role="alert"></p>
       <!-- Niet in de bewerkmodus (zie app.js) -->
@@ -38,9 +38,6 @@
             <h2 class="sheet-heading">Tips</h2>
             <button type="button" class="add-tip" id="add-tip" title="Tip toevoegen (T)" aria-label="Tip toevoegen" aria-keyshortcuts="T">+</button>
             <ul class="sheet-list tips-list" id="tips-list"></ul>
-            <!-- Voorleesregel: alleen de nieuwe tips van de laatste klik (niet de hele lijst, die
-                 bij terugbladeren opnieuw wordt opgebouwd); zie announceTips() in app.js -->
-            <p class="sr-only" id="tips-announcer" aria-live="polite"></p>
             <form class="tip-form" id="tip-form" hidden>
               <input id="tip-input" type="text" maxlength="120" autocomplete="off" placeholder="Nieuwe tip…" aria-label="Nieuwe tip">
             </form>
@@ -50,11 +47,19 @@
       </section>
 
       <!-- Whiteboard: kanban, vraagzone en (op verzoek) de werkafspraken -->
+      <!-- Eén voorleesregel voor alles wat een klik laat verschijnen (vraag, tips, blaadje), in één
+           melding: losse meldingen kort na elkaar breken elkaar af. Zie announce() in app.js. -->
+      <p class="sr-only" id="announcer" aria-live="polite"></p>
+
       <section class="whiteboard" aria-label="Whiteboard">
         <div class="wb-surface">
           <!-- Doelen: alleen de tekst met een aankruisvakje per doel (gevuld door app.js); leeg = verborgen -->
-          <ul class="wb-goals" id="goals-list" aria-label="Doelen" hidden></ul>
-          <div class="kanban">
+          <!-- De onderdelen van het bord zijn gebieden (regions), zodat een schermlezer er direct heen kan.
+               De omhulling van de doelen neemt zelf geen ruimte in (display: contents). -->
+          <div class="wb-region" role="region" aria-label="Doelen" id="goals-region">
+            <ul class="wb-goals" id="goals-list" hidden></ul>
+          </div>
+          <div class="kanban" role="region" aria-label="Kanbanbord">
             <div class="kb-col" data-col="todo"><h3>To do</h3><div class="kb-cards" id="col-todo"></div></div>
             <div class="kb-col" data-col="doing"><h3>Doing</h3><div class="kb-cards" id="col-doing">
                 <!-- Alleen in de bewerkmodus: het huidige onderwerp een plek eerder of later -->
@@ -72,7 +77,7 @@
           <!-- Vraagzone onderaan: houdt altijd zijn hoogte, zodat de geeltjes niet verspringen.
                De voorleesregio staat op de zone zelf (altijd aanwezig), niet op het vraagvlak dat
                pas bij een vraag zichtbaar wordt: anders kondigen schermlezers de vraag niet aan. -->
-          <div class="wb-bottom" aria-live="polite">
+          <div class="wb-bottom" role="region" aria-label="Vraag">
             <div class="wb-question" id="wb-question" hidden>
               <span class="q-mark" aria-hidden="true">?</span>
               <p class="q-text" id="wb-question-text"></p>
@@ -80,8 +85,7 @@
           </div>
           <!-- Afbeelding op het bord: een vel papier met twee magneten (gevuld door app.js), over de doelen
                en het kanbanbord maar niet over de vraagzone; de werkafspraken komen er wel overheen -->
-          <div class="pin-layer" id="pin-layer"></div>
-          <p class="sr-only" id="pin-announcer" aria-live="polite"></p>
+          <div class="pin-layer" id="pin-layer" aria-label="Blaadje"></div>
           <!-- Werkafspraken: standaard verborgen, met de knop in de bedieningsbalk over het bord heen -->
           <div class="agreements" id="agreements" role="region" aria-label="Werkafspraken" hidden>
             <h3>Werkafspraken</h3>
