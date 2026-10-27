@@ -74,6 +74,7 @@
             ],
             [
               { "type": "keyword", "text": "Begin bij wachten", "gap": "line" },
+              { "type": "pin", "image": "wachten-vierkant", "paper": "A5", "text": "Cartoon: een poppetje naast een zandloper zegt: Ik wacht al drie weken." },
               { "type": "tip", "text": "Wachten is de makkelijkste om te zien" },
               { "type": "question", "text": "Waar wacht jouw werk het langst op?" }
             ],
@@ -91,12 +92,14 @@
           "title": "De waardestroom",
           "steps": [
             [
-              { "type": "keyword", "text": "Volg één order" }
+              { "type": "keyword", "text": "Volg één order" },
+              { "type": "pin", "image": "waardestroom-panorama", "text": "Schets van een waardestroom in vijf stappen, van order tot leveren, met onder elke stap de doorlooptijd." }
             ],
             [
               { "type": "keyword", "text": "Doorlooptijd vs. bewerkingstijd" }
             ],
             [
+              { "type": "unpin" },
               { "type": "keyword", "text": "Doorlooptijd: wachten + werken", "indent": 1 },
               { "type": "keyword", "text": "vaak weken", "indent": 2 },
               { "type": "keyword", "text": "Bewerkingstijd: echt werken", "indent": 1 },
@@ -116,7 +119,8 @@
           "title": "Flow",
           "steps": [
             [
-              { "type": "keyword", "text": "Kleinere batches" }
+              { "type": "keyword", "text": "Kleinere batches" },
+              { "type": "pin", "image": "cartoon-liggend", "text": "Cartoon: een poppetje bij een kanbanbord met zes geeltjes in Doing zegt: Nog één dingetje erbij." }
             ],
             [
               { "type": "keyword", "text": "WIP-limieten" },
@@ -145,7 +149,8 @@
           "title": "Continu verbeteren",
           "steps": [
             [
-              { "type": "keyword", "text": "PDCA" }
+              { "type": "keyword", "text": "PDCA" },
+              { "type": "pin", "image": "cartoon-staand", "text": "De PDCA-cirkel: Plan, Do, Check en Act als vier pijlen in een rondje, met eronder: en dan weer van voren af aan." }
             ],
             [
               { "type": "keyword", "text": "Plan", "indent": 1, "numbered": true },
@@ -154,7 +159,8 @@
               { "type": "keyword", "text": "Act", "indent": 1, "numbered": true }
             ],
             [
-              { "type": "tip", "text": "Kleine stappen, vaak" }
+              { "type": "tip", "text": "Kleine stappen, vaak" },
+              { "type": "unpin" }
             ],
             [
               { "type": "keyword", "text": "Gemba", "gap": "space" },

@@ -4,3 +4,13 @@ content.json
 
 node_modules/
 .DS_Store
+
+# Afbeeldingen voor op het whiteboard: alleen de versleutelde versies (naam.enc.png/.jpg) mogen
+# de repository in. De demo-afbeeldingen staan apart, in img_demo/ (openbaar).
+img/*.png
+img/*.jpg
+!img/*.enc.png
+!img/*.enc.jpg
+
+# Testscripts (lokaal; uitvoer zoals runs/ en fuzzroot/ komt hier ook in)
+Test/

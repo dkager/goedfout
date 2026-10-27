@@ -78,6 +78,10 @@
               <p class="q-text" id="wb-question-text"></p>
             </div>
           </div>
+          <!-- Afbeelding op het bord: een vel papier met twee magneten (gevuld door app.js), over de doelen
+               en het kanbanbord maar niet over de vraagzone; de werkafspraken komen er wel overheen -->
+          <div class="pin-layer" id="pin-layer"></div>
+          <p class="sr-only" id="pin-announcer" aria-live="polite"></p>
           <!-- Werkafspraken: standaard verborgen, met de knop in de bedieningsbalk over het bord heen -->
           <div class="agreements" id="agreements" role="region" aria-label="Werkafspraken" hidden>
             <h3>Werkafspraken</h3>
@@ -123,12 +127,54 @@
         <p id="end-pdf-note" class="end-note">Alle vellen en de tips, elk op een A4. Kies in het afdrukvenster ‘Opslaan als PDF’.</p>
       </div>
       <div id="end-download" class="end-download" hidden>
-        <a id="btn-download" class="end-download-link" download="content.json">
-          <span aria-hidden="true">⤓</span> Download content.json
-        </a>
+        <button type="button" id="btn-export" class="end-download-link">
+          <span aria-hidden="true">⤓</span> Versleuteld exporteren
+        </button>
         <p id="end-note" class="end-note"></p>
       </div>
     </section>
+
+    <!-- Afbeeldingen (bewerkmodus): miniaturen met hun code; uploaden en verwijderen -->
+    <dialog id="images-dialog" class="export-dialog images-dialog" aria-labelledby="images-title" aria-describedby="images-intro">
+      <div class="export-card">
+        <h2 id="images-title">Afbeeldingen</h2>
+        <p id="images-intro">Klik op een afbeelding om de code (@naam) te kopiëren. Uploads blijven in het geheugen tot je exporteert.</p>
+        <ul id="images-list" class="images-list"></ul>
+        <p id="images-status" class="export-status" role="status"></p>
+        <div class="export-buttons">
+          <input id="images-file" type="file" accept="image/png,image/jpeg" multiple hidden>
+          <button type="button" id="images-upload">Afbeelding uploaden</button>
+          <button type="button" id="images-close" class="primary" aria-keyshortcuts="Escape" title="Sluiten (Esc)">Sluiten</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Een vraag met twee knoppen (zoals Vervangen/Annuleren), zie ask() in app.js -->
+    <dialog id="ask-dialog" class="export-dialog" aria-labelledby="ask-text">
+      <form id="ask-form" class="export-card">
+        <p id="ask-text" class="ask-text"></p>
+        <div class="export-buttons">
+          <button type="button" id="ask-cancel" aria-keyshortcuts="Escape" title="Annuleren (Esc)">Annuleren</button>
+          <button type="submit" id="ask-ok" class="primary"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Versleuteld exporteren (afsluitscherm): twee keer het wachtwoord, daarna content.enc.json -->
+    <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title" aria-describedby="export-intro">
+      <form id="export-form" class="export-card">
+        <h2 id="export-title">Versleuteld exporteren</h2>
+        <p id="export-intro">Kies het wachtwoord voor de nieuwe content.enc.json. Daarmee open je de presentatie voortaan.</p>
+        <p id="export-unused" class="export-status" hidden></p>
+        <label>Wachtwoord <input id="export-pw1" type="password" autocomplete="new-password"></label>
+        <label>Wachtwoord herhalen <input id="export-pw2" type="password" autocomplete="new-password"></label>
+        <p id="export-status" class="export-status" role="status"></p>
+        <div class="export-buttons">
+          <button type="button" id="export-cancel" aria-keyshortcuts="Escape" title="Annuleren (Esc)">Annuleren</button>
+          <button type="submit" id="export-ok" class="primary" disabled>Exporteren</button>
+        </div>
+      </form>
+    </dialog>
 
     <nav class="controls" aria-label="Bediening">
       <button id="btn-prev" title="Vorige (←)">‹</button>
@@ -150,6 +196,9 @@
       <!-- Alleen in de bewerkmodus, en alleen zolang de werkafspraken in beeld zijn -->
       <button id="btn-agreements-edit" class="labeled" hidden
               title="Werkafspraken bewerken als tekst">Werkafspraken bewerken</button>
+      <!-- Alleen in de bewerkmodus: de lijst met afbeeldingen (uploaden, code kopiëren, verwijderen) -->
+      <button id="btn-images" class="labeled" hidden
+              title="Afbeeldingen bekijken, uploaden en verwijderen">Afbeeldingen</button>
     </nav>
   </div>
 

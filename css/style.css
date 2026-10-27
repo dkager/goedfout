@@ -574,6 +574,44 @@ body {
 /* Opgepakt geeltje: duidelijk van het bord getild */
 .sticky.moving .note { box-shadow: 6px 18px 22px rgba(0,0,0,.26), 0 3px 6px rgba(0,0,0,.14); }
 
+/* ---------- Afbeelding op het bord: vel papier met twee magneten (zie renderPin) ---------- */
+/* Het vlak boven de vraagzone: van de bovenrand van het schrijfvlak tot net boven de stippellijn
+   (680 - 18 onderpadding - 150 vraagzone - 10 marge = 502). Boven de geeltjes (die schuiven op
+   z-index 20), onder de werkafspraken (40). */
+.pin-layer {
+  position: absolute; left: 0; right: 0; top: 0; height: 502px; z-index: 30;
+  display: grid; place-items: center;
+  pointer-events: none;
+}
+/* Papier op schaal: A4 is altijd even groot, staand of liggend (de lange zijde past precies in
+   de hoogte van het vlak); A3 is A4 maal √2 (liggend past het net), A5 is A4 gedeeld door √2. */
+.pin-paper {
+  --long: 470px;
+  grid-area: 1 / 1;
+  position: relative;
+  width: calc(var(--long) / 1.41421); height: var(--long);
+  padding: calc(var(--long) * .04);
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(170deg, #fdfdfb, #f3f2ec);
+  box-shadow: 0 1px 2px rgba(0,0,0,.18), 0 6px 14px rgba(0,0,0,.12);
+  pointer-events: auto; /* live: wat eronder hangt, is niet aan te klikken */
+}
+.pin-paper[data-paper='A3'] { --long: 665px; } /* alleen liggend: staand past het niet boven de vraagzone */
+.pin-paper[data-paper='A5'] { --long: 332px; }
+.pin-paper[data-orient='landscape'] { width: var(--long); height: calc(var(--long) / 1.41421); }
+.pin-paper img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.pin-missing { margin: 0; padding: 0 12%; font: 15px/1.4 var(--ui); color: #8a8a8a; text-align: center; }
+/* Ronde magneten, half over de bovenrand van het papier; overal even groot (A4 en A5) */
+.magnet {
+  position: absolute; top: -9px; width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, rgba(255,255,255,.85) 0 9%, rgba(255,255,255,0) 30%), var(--c);
+  box-shadow: 0 3px 4px rgba(0,0,0,.35), inset 0 -3px 5px rgba(0,0,0,.25), inset 0 0 0 1px rgba(0,0,0,.15);
+}
+.magnet-left { left: 9%; --c: #2b54b8; }
+.magnet-right { right: 9%; --c: #c8322a; }
+/* Bewerkmodus: doorzichtig en niet in de weg, zodat de doelen en geeltjes eronder te bewerken zijn */
+.edit-mode .pin-paper { opacity: .35; pointer-events: none; }
+
 /* ---------- Werkafspraken (overlay over het hele bord, met de knop in de bedieningsbalk) ---------- */
 .agreements {
   position: absolute; inset: 0; z-index: 40; /* boven verschuivende geeltjes (z-index 20) */
@@ -678,6 +716,70 @@ body {
 .end-download-link span { font-size: 1.2em; line-height: 1; }
 .end-download-link:hover { background: var(--end-accent-hover); transform: translateY(-1px); }
 .end-download-link:focus-visible { outline: 3px solid var(--end-text); outline-offset: 4px; }
+button.end-download-link { border: 0; font-family: inherit; cursor: pointer; }
+
+/* Versleuteld exporteren: een donker venster in de stijl van het afsluitscherm */
+.export-dialog {
+  --end-text: #eceff1; --end-muted: #a7b0b8; --end-accent: #3ccf7e; --end-accent-hover: #5fdc96; --end-on-accent: #0d1f14;
+  width: min(420px, calc(100vw - 32px)); padding: 0;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 14px;
+  background: #1b1f24; color: var(--end-text);
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  color-scheme: dark;
+  font-family: var(--ui);
+}
+.export-dialog::backdrop { background: rgba(5,7,9,.6); }
+.export-card { display: flex; flex-direction: column; gap: 12px; padding: 26px 26px 22px; }
+.export-card h2 { margin: 0 0 2px; font-size: 22px; font-weight: 800; }
+.export-card p { margin: 0; color: var(--end-muted); font-size: 15px; line-height: 1.45; }
+.export-card label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+.export-card input {
+  font: inherit; font-size: 16px; font-weight: 400; padding: 10px 12px;
+  border: 1.5px solid rgba(255,255,255,.18); border-radius: 8px;
+  background: rgba(255,255,255,.06); color: var(--end-text);
+}
+.export-card input:focus { outline: 2px solid var(--end-accent); outline-offset: 1px; border-color: transparent; }
+.export-card .export-status { min-height: 1.4em; font-size: 14px; white-space: pre-line; }
+.export-status.error { color: #ff8a80; }
+.export-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.export-buttons button {
+  font: inherit; font-size: 15px; font-weight: 700; padding: 10px 18px; border-radius: 8px; cursor: pointer;
+  border: 1.5px solid rgba(255,255,255,.25); background: transparent; color: var(--end-text);
+}
+.export-buttons button.primary { border-color: transparent; background: var(--end-accent); color: var(--end-on-accent); }
+.export-buttons button.primary:hover:not(:disabled) { background: var(--end-accent-hover); }
+.export-buttons button:disabled { opacity: .45; cursor: default; }
+.export-buttons button:focus-visible { outline: 3px solid var(--end-text); outline-offset: 3px; }
+.export-card .ask-text { color: var(--end-text); font-size: 16px; white-space: pre-line; }
+
+/* Afbeeldingen (bewerkmodus): een raster van miniaturen met hun code en een verwijderknop */
+.images-dialog { width: min(760px, calc(100vw - 32px)); }
+.images-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;
+  max-height: min(56vh, 520px); overflow: auto; margin: 4px 0 0; padding: 2px; list-style: none;
+}
+.images-list .empty { grid-column: 1 / -1; color: var(--end-muted); font-size: 15px; }
+.image-tile { display: flex; flex-direction: column; gap: 6px; }
+.image-copy {
+  display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 1.5px solid rgba(255,255,255,.14); border-radius: 8px;
+  background: rgba(255,255,255,.04); color: var(--end-text); font: inherit; text-align: left; cursor: copy;
+}
+.image-copy:hover { border-color: var(--end-accent); }
+.image-copy:focus-visible { outline: 3px solid var(--end-text); outline-offset: 2px; }
+.image-thumb {
+  display: grid; place-items: center; height: 96px; border-radius: 4px; overflow: hidden;
+  background: #f3f2ec; color: #6f6f6f; font-size: 13px;
+}
+.image-thumb img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.image-thumb.broken { background: #3a3f45; color: var(--end-muted); }
+.image-name { font: 600 13px ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.image-meta { font-size: 12px; color: var(--end-muted); }
+.image-delete {
+  align-self: flex-start; padding: 4px 10px; border: 1px solid rgba(255,255,255,.22); border-radius: 6px;
+  background: transparent; color: var(--end-muted); font: inherit; font-size: 13px; cursor: pointer;
+}
+.image-delete:hover { color: #ff8a80; border-color: #ff8a80; }
+.image-delete:focus-visible { outline: 3px solid var(--end-text); outline-offset: 2px; }
 .end-note { margin: 0; max-width: 34em; text-wrap: balance; color: var(--end-muted); font-size: clamp(14px, 2vmin, 17px); line-height: 1.5; }
 
 /* De bediening blijft op het start- en afsluitscherm zichtbaar, met een rand zodat hij loskomt van de donkere achtergrond */

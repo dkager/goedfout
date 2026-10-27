@@ -6,9 +6,25 @@
 
 /**
  * Soorten items. Een nieuw type hier toevoegen, en de weergave in app.js
- * (keywordsAt/tipsAt/questionAt/checkedGoalsAt). "check" vinkt een doel af ({ type, goal }).
+ * (keywordsAt/tipsAt/questionAt/checkedGoalsAt/pinnedAt). "check" vinkt een doel af
+ * ({ type, goal }); "pin" hangt een afbeelding op het whiteboard ({ type, image, text, paper? })
+ * en "unpin" haalt hem weer weg ({ type }).
  */
-const ITEM_TYPES = new Set(['keyword', 'tip', 'question', 'check']);
+const ITEM_TYPES = new Set(['keyword', 'tip', 'question', 'check', 'pin', 'unpin']);
+
+/**
+ * Naam van een afbeelding ("image" bij een pin): img/<naam>.png of .jpg, versleuteld
+ * img/<naam>.enc.png of .enc.jpg (in de demo img_demo/<naam>.png of .jpg). Kleine
+ * letters, cijfers, - en _, beginnend met een letter of cijfer: geen pad en geen extensie.
+ * Kleine letters omdat GitHub Pages hoofdletters in bestandsnamen wel onderscheidt.
+ */
+export const IMAGE_NAME = /^[a-z0-9][a-z0-9_-]*$/;
+
+/**
+ * Papierformaten voor een afbeelding ("paper" bij een pin). Zonder paper kiest de motor zelf, naar
+ * het aantal pixels (zie autoPaper in app.js). A3 bestaat alleen liggend.
+ */
+export const PAPER_SIZES = ['A3', 'A4', 'A5'];
 
 /**
  * De vaste ids van de doelen, in volgorde en dus ook hun vak in de strook bovenaan het
@@ -26,6 +42,18 @@ export const GOALS_MAX = GOAL_IDS.length;
  * tekens niet meer.
  */
 export const GOAL_TEXT_MAX = 100;
+
+/**
+ * Maximale lengte van een veltitel in de bewerkmodus (tekens). Gemeten: 30 tekens is 2 regels,
+ * 40 tekens 3 regels; daarboven 4 tot 7 regels, die de steekwoorden wegdrukken.
+ */
+export const SHEET_TITLE_MAX = 40;
+
+/**
+ * Maximale lengte van de naam van een onderwerp in de bewerkmodus (tekens). Gemeten: tot 25
+ * tekens 22px op het geeltje, bij 30 tekens 20px; daarboven kleiner (bij 60 tekens 16px).
+ */
+export const TOPIC_NAME_MAX = 30;
 
 /**
  * Maximaal aantal onderwerpen (geeltjes). Gemeten op 1920×1080: tot 6 onderwerpen passen er 2
@@ -159,11 +187,40 @@ export function normalizeContent(raw) {
           return null;
         }
         let hasQuestion = false;
+        let hasPin = false; // hooguit één pin of unpin per step
         const items = step.filter((item, n) => {
           const atItem = `${atStep}, item ${n + 1}`;
           if (!item || !ITEM_TYPES.has(item.type)) {
             problems.push(`${atItem}: onbekend type "${item && item.type}" — overgeslagen.`);
             return false;
+          }
+          if (item.type === 'pin' || item.type === 'unpin') {
+            if (hasPin) {
+              errors.push(`${atItem}: een step hangt hooguit één afbeelding op of haalt er één weg — overgeslagen.`);
+              return false;
+            }
+            if (item.type === 'pin') {
+              // Streng (fouten), maar hoofdletterongevoelig: "Kat" wordt "kat", "a5" wordt "A5".
+              const name = typeof item.image === 'string' ? item.image.trim().toLowerCase() : '';
+              if (!IMAGE_NAME.test(name)) {
+                errors.push(`${atItem}: "image" moet de naam van een afbeelding in img/ zijn, zonder extensie (letters, cijfers, - en _), niet "${item.image}" — overgeslagen.`);
+                return false;
+              }
+              if (typeof item.text !== 'string' || !item.text.trim()) {
+                errors.push(`${atItem}: een afbeelding heeft een beschrijving nodig ("text", voor schermlezers) — overgeslagen.`);
+                return false;
+              }
+              const paper = typeof item.paper === 'string' ? item.paper.trim().toUpperCase() : item.paper;
+              if (paper !== undefined && !PAPER_SIZES.includes(paper)) {
+                errors.push(`${atItem}: "paper" moet ${PAPER_SIZES.slice(0, -1).join(', ')} of ${PAPER_SIZES.at(-1)} zijn (of weglaten: automatisch), niet "${item.paper}" — overgeslagen.`);
+                return false;
+              }
+              item.image = name;
+              item.text = oneLine(item.text, atItem, problems);
+              if (paper !== undefined) item.paper = paper;
+            }
+            hasPin = true;
+            return true;
           }
           if (item.type === 'check') {
             // Streng (een fout), maar hoofdletterongevoelig: "DOEL1" wordt "doel1".

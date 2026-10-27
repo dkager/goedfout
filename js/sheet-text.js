@@ -15,9 +15,16 @@
 //   ? tekst            vraag op het whiteboard (een tweede vraag begint vanzelf een nieuwe klik)
 //   ! tekst            tip op de linker flip-over
 //   +id                vinkt het doel met die id af (hoofdletters maken niet uit)
+//   @naam tekst        hangt afbeelding naam op het whiteboard, in een formaat dat de motor
+//                      kiest; de tekst is de verplichte beschrijving voor schermlezers (niet in
+//                      beeld).
+//   @naam [A5] tekst   idem, met het formaat erbij: [A3], [A4] of [A5], direct na de naam
+//                      (hoofdletters maken niet uit). Een tweede afbeelding in dezelfde klik
+//                      begint vanzelf een nieuwe klik.
+//   @-                 haalt de afbeelding weer weg
 // Elke andere regel wordt een steekwoord met bullet. Een regel met alleen codes en geen tekst
 // (zoals "* [rood]" of "?") wordt overgeslagen. Ruimte en lijnen gelden alleen vóór een
-// steekwoord (niet vóór een vraag, tip, doel of klik, en niet bovenaan het vel); meerdere
+// steekwoord (niet vóór een vraag, tip, doel, afbeelding of klik, en niet bovenaan het vel); meerdere
 // lege regels, lijnen of klikken na elkaar tellen als één. Onzichtbare tekens aan het begin
 // en eind van een regel (zero-width space, BOM, richtingstekens, …) tellen niet mee; U+2028,
 // U+2029 en een losse \r zijn een nieuwe regel.
@@ -68,6 +75,11 @@ export function stepsToText(steps) {
       if (item.type === 'question') lines.push('? ' + item.text);
       else if (item.type === 'tip') lines.push('! ' + item.text);
       else if (item.type === 'check') lines.push('+' + item.goal);
+      else if (item.type === 'unpin') lines.push('@-');
+      else if (item.type === 'pin') {
+        const paper = item.paper ? ` [${item.paper}]` : ''; // zonder: automatisch
+        lines.push('@' + item.image + paper + ' ' + item.text);
+      }
       else if (item.type === 'keyword') {
         const level = [1, 2].includes(item.indent) ? item.indent : 0;
         if (item.gap === 'line') lines.push('---');
@@ -89,6 +101,8 @@ export function stepsToText(steps) {
 /**
  * Leest de tekst terug als klikken (steps). goalIds: de ids die met +id afgevinkt kunnen worden;
  * een onbekende id wordt een gewoon steekwoord. Het resultaat kan leeg zijn ([]).
+ * Een afbeelding (@naam) wordt altijd een pin, ook met een ongeldige naam of zonder
+ * beschrijving: dat controleert de bewerkmodus vóór het opslaan (zie pinProblem).
  */
 export function textToSteps(text, goalIds) {
   const goals = new Map([...goalIds].map((id) => [id.toLowerCase(), id]));
@@ -110,6 +124,25 @@ export function textToSteps(text, goalIds) {
     const lead = LEADING.exec(raw)[0].replace(new RegExp(`[${INVISIBLE}]`, 'g'), '');
     const spaces = lead.replace(/\t/g, '  ').length;
     const indent = spaces >= 4 ? 2 : spaces >= 2 ? 1 : 0;
+
+    // Afbeelding: vóór de kleurlabels, zodat [rood] in een beschrijving gewoon tekst blijft.
+    const pin = /^@(\S*)([^]*)$/.exec(content);
+    if (pin) {
+      if (pin[1] === '') continue; // alleen "@": overslaan
+      if (step().some((it) => it.type === 'pin' || it.type === 'unpin')) newStep(); // tweede: impliciete klik
+      if (pin[1] === '-' && clean(pin[2]) === '') step().push({ type: 'unpin' });
+      else {
+        let rest = clean(pin[2]);
+        let paper = null;
+        const size = /^\[(a[345])\]([^]*)$/i.exec(rest);
+        if (size) { paper = size[1].toUpperCase(); rest = clean(size[2]); }
+        const item = { type: 'pin', image: pin[1].toLowerCase(), text: rest };
+        if (paper) item.paper = paper;
+        step().push(item);
+      }
+      gap = null;
+      continue;
+    }
 
     const { text, color } = takeColors(content);
     if (!hasText(text)) continue; // alleen codes (zoals "* [rood]" of "?"): overslaan
@@ -158,6 +191,17 @@ export function textToSteps(text, goalIds) {
 
   if (!step().length) steps.pop();
   return steps;
+}
+
+/**
+ * Wat er mis is met een afbeelding uit textToSteps, als zin voor een melding, of null.
+ * imageName: de toegestane namen (IMAGE_NAME uit content.js).
+ */
+export function pinProblem(item, imageName) {
+  if (item.type !== 'pin') return null;
+  if (!imageName.test(item.image)) return `„@${item.image}” is geen geldige naam: gebruik letters, cijfers, - en _ (de bestandsnaam in img/, zonder .png of .jpg).`;
+  if (!item.text) return `Achter „@${item.image}” hoort een beschrijving van de afbeelding, voor schermlezers (die staat niet in beeld).`;
+  return null;
 }
 
 /** De regel zonder witruimte en onzichtbare tekens aan begin en eind (lineair, ook bij lange witruimte). */

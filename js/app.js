@@ -2,11 +2,13 @@
 // flip-over links (tips) en rechts (steekwoorden). Alle weergave wordt afgeleid uit één positie:
 //   pos = { sheet: index in de platte lijst van vellen, step: aantal uitgevoerde steps (klikken) }
 // sheet === -1 is het donkere startscherm, sheet === aantal vellen het donkere afsluitscherm.
-// Een step is een lijst van items (keyword, tip, question, check) die bij één klik verschijnen.
+// Een step is een lijst van items (keyword, tip, question, check, pin, unpin) die bij één klik
+// verschijnen.
 
-import { decryptText, WrongPasswordError } from './crypto-core.js';
-import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, TOPICS_MAX, dropRepeatedChecks } from './content.js';
-import { stepsToText, textToSteps, listToText, textToList } from './sheet-text.js';
+import { payloadKey, decryptTextWith, newKey, encryptTextWith, encryptBytes, decryptBytes, WrongPasswordError } from './crypto-core.js';
+import { zipFiles } from './zip.js';
+import { normalizeContent, KEYWORD_COLORS, KEYWORD_INDENTS, KEYWORD_GAPS, GOAL_IDS, GOALS_MAX, GOAL_TEXT_MAX, SHEET_TITLE_MAX, TOPIC_NAME_MAX, TOPICS_MAX, IMAGE_NAME, dropRepeatedChecks } from './content.js';
+import { stepsToText, textToSteps, listToText, textToList, pinProblem } from './sheet-text.js';
 
 const STAGE_W = 1600;
 const STAGE_H = 900;
@@ -26,6 +28,8 @@ const els = {
   tipsSheet: $('#tips-sheet'),
   tipsList: $('#tips-list'),
   tipsAnnouncer: $('#tips-announcer'),
+  pinLayer: $('#pin-layer'),
+  pinAnnouncer: $('#pin-announcer'),
   keywordPad: $('#keyword-pad'),
   keywordSheet: $('#keyword-sheet'),
   keywordList: $('#keyword-list'),
@@ -36,6 +40,19 @@ const els = {
   agreementsBox: $('#agreements'),
   agreementsBtn: $('#btn-agreements'),
   agreementsEditBtn: $('#btn-agreements-edit'),
+  imagesBtn: $('#btn-images'),
+  imagesDialog: $('#images-dialog'),
+  imagesList: $('#images-list'),
+  imagesStatus: $('#images-status'),
+  imagesFile: $('#images-file'),
+  imagesUpload: $('#images-upload'),
+  imagesClose: $('#images-close'),
+  askDialog: $('#ask-dialog'),
+  askForm: $('#ask-form'),
+  askText: $('#ask-text'),
+  askOk: $('#ask-ok'),
+  askCancel: $('#ask-cancel'),
+  exportUnused: $('#export-unused'),
   addSheetBtn: $('#btn-sheet-add'),
   topicTools: $('#topic-tools'),
   topicEarlier: $('#btn-topic-earlier'),
@@ -61,7 +78,14 @@ const els = {
   endScreen: $('#end-screen'),
   endDownload: $('#end-download'),
   endNote: $('#end-note'),
-  download: $('#btn-download'),
+  exportBtn: $('#btn-export'),
+  exportDialog: $('#export-dialog'),
+  exportForm: $('#export-form'),
+  exportPw1: $('#export-pw1'),
+  exportPw2: $('#export-pw2'),
+  exportStatus: $('#export-status'),
+  exportOk: $('#export-ok'),
+  exportCancel: $('#export-cancel'),
   pdf: $('#btn-pdf'),
   print: $('#print'),
   controls: document.querySelector('.controls'),
@@ -86,7 +110,7 @@ const original = new Map();        // item uit de inhoud → JSON zoals geladen 
 const originalSheets = new Map();  // vel uit de inhoud → { title, order, topic } zoals geladen (toegevoegd, verwijderd, hernoemd, verplaatst)
 const originalTopics = new Map();  // onderwerp uit de inhoud → { index in de JSON, naam zoals geladen }
 // ?demo: de voorbeeldinhoud (content.example.json, staat onversleuteld in de repository), zonder
-// wachtwoord, altijd live. Gaat voor ?edit en ?plain: met ?demo in de adresbalk tellen die niet.
+// wachtwoord, altijd live en zonder export. Gaat voor ?edit: met ?demo in de adresbalk telt die niet.
 const demoMode = new URLSearchParams(location.search).has('demo');
 const editMode = new URLSearchParams(location.search).has('edit') && !demoMode;
 
@@ -94,10 +118,9 @@ const editMode = new URLSearchParams(location.search).has('edit') && !demoMode;
 /* Laden en ontsleutelen                                               */
 /* ------------------------------------------------------------------ */
 
-const isLocalhost = ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname);
-// ?plain en ?edit gaan niet samen: met allebei in de adresbalk geldt de gewone bewerkmodus
-// (versleutelde inhoud, met wachtwoord).
-const usePlain = isLocalhost && new URLSearchParams(location.search).has('plain') && !editMode && !demoMode;
+// De sleutel van de geladen inhoud (niet het wachtwoord); daarmee worden de afbeeldingen
+// (img/naam.enc.png) ontsleuteld. null in de demo.
+let contentKey = null;
 
 async function loadContent(password) {
   if (demoMode) {
@@ -106,16 +129,13 @@ async function loadContent(password) {
     if (!r.ok) throw new Error('De demo kon niet worden geladen (' + r.status + ').');
     return r.json();
   }
-  if (usePlain) {
-    // Alleen voor lokaal ontwikkelen: laadt de onversleutelde content.json.
-    const r = await fetch('content.json', { cache: 'no-store' });
-    if (!r.ok) throw new Error('content.json niet gevonden (' + r.status + ')');
-    return r.json();
-  }
   const r = await fetch('content.enc.json', { cache: 'no-store' });
   if (!r.ok) throw new Error('De presentatie kon niet worden geladen (' + r.status + ').');
   const payload = await r.json();
-  return JSON.parse(await decryptText(payload, password));
+  const key = await payloadKey(payload, password);
+  const raw = JSON.parse(await decryptTextWith(payload, key));
+  contentKey = key;
+  return raw;
 }
 
 els.form.addEventListener('submit', async (e) => {
@@ -140,7 +160,7 @@ els.form.addEventListener('submit', async (e) => {
 els.demoLink.hidden = editMode;
 if (demoMode) document.getElementById('demo-badge').hidden = false;
 
-if (usePlain || demoMode) {
+if (demoMode) {
   loadContent().then(start).catch((err) => { els.loginError.textContent = err.message; });
 }
 
@@ -152,8 +172,8 @@ function start(raw) {
   // Het model is een kopie, zodat raw het origineel blijft om mee te vergelijken.
   const { content, problems, errors } = normalizeContent(structuredClone(raw));
   for (const p of problems) console.warn(p);
-  // Fouten (zoals een vel zonder titel) tonen we toch, zodat je met ?plain kunt doorwerken;
-  // tools/encrypt.js weigert ze wel.
+  // Fouten (zoals een vel zonder titel) tonen we toch, zodat je kunt doorwerken; versleuteld
+  // exporteren en tools/encrypt.js weigeren ze wel.
   for (const e of errors) console.error(e);
   rawContent = raw;
   deck = content;
@@ -170,6 +190,9 @@ function start(raw) {
   deck.topics.forEach((topic, t) => originalTopics.set(topic, { index: t, name: topic.sticky }));
   for (const f of flat) originalSheets.set(f.model, { title: f.title, order: originalSheets.size, topic: deck.topics[f.topic] });
   for (const f of flat) for (const step of f.steps) for (const item of step) original.set(item, JSON.stringify(item));
+
+  // Afbeeldingen alvast laden, zodat ophangen meteen kan (zie loadImage)
+  for (const f of flat) for (const step of f.steps) for (const item of step) if (item.type === 'pin') loadImage(item.image);
 
   // Werkafspraken (standaard verborgen; zonder afspraken ook geen knop)
   renderAgreements();
@@ -363,6 +386,19 @@ function checkedGoalsAt(p) {
   return out;
 }
 
+/**
+ * De afbeelding die op positie p op het whiteboard hangt (het pin-item), of null. De laatste
+ * pin of unpin tot en met p telt, ook van eerdere vellen: een afbeelding blijft hangen tot hij
+ * wordt weggehaald of vervangen.
+ */
+function pinnedAt(p) {
+  let out = null;
+  const take = (it) => { if (it.type === 'pin') out = it; else if (it.type === 'unpin') out = null; };
+  for (let i = 0; i < Math.min(p.sheet, flat.length); i++) for (const step of flat[i].steps) step.forEach(take);
+  shownItems(p).forEach(take);
+  return out;
+}
+
 /** De huidige step (die van de laatste klik), of null. */
 const currentStep = (p) => (isContent(p) && p.step > 0 ? flat[p.sheet].steps[p.step - 1] : null);
 
@@ -421,6 +457,12 @@ function render(previous) {
   const goalsDone = checkedGoalsAt(pos);
   const newlyChecked = previous === null ? [] : [...goalsDone].filter((id) => !checkedGoalsAt(previous).has(id));
   if (sheetTurned) playPageTurn();
+  // Afbeelding ophangen, vervangen of weghalen: na het geritsel, vóór de vraagtoon. De beweging
+  // begint tegelijk met het geluid.
+  const pinned = pinnedAt(pos);
+  const pinChanged = previous !== null && pinned !== pinnedAt(previous);
+  const pinAt = !pinChanged ? 0 : pinned ? playPinUp() : playPinDown();
+  renderPin(pinned, animate && pinChanged, pinAt);
   if (previous !== null && question !== null) playQuestionTone();
   const tipsAdded = previous !== null && tipsAt(pos).length > tipsAt(previous).length;
   if (tipsAdded) playBell();
@@ -460,6 +502,186 @@ function render(previous) {
   updateProgress();
   updateButtons();
   updateDownload();
+}
+
+/* ---------- Afbeelding op het whiteboard ---------- */
+// Een vel papier met twee ronde magneten, over de doelen en het kanbanbord (niet over de
+// vraagzone; de werkafspraken komen er wel overheen). Het papier is A4 of A5, staand of liggend
+// naar de verhouding van de afbeelding, en altijd even groot: A4 is A4, waar de afbeelding ook
+// vandaan komt. De afbeelding wordt erop gecentreerd en passend geschaald. De beschrijving
+// (text) is alleen de alt-tekst. Ophangen: het vel komt tegen het bord, daarna klikken de
+// magneten erop; weghalen: eerst de magneten eraf, dan het vel.
+
+/**
+ * naam → { ok: true, url, w, h, bytes, ext } | { ok: false, why } | Promise zolang hij laadt.
+ * bytes: de onversleutelde afbeelding (voor de export), ext: png of jpg.
+ */
+const images = new Map();
+
+/**
+ * Waar een afbeelding staat, in volgorde van zoeken: [pad, ext, versleuteld].
+ * - demo: img_demo/naam.png of .jpg (openbaar, onversleuteld);
+ * - anders: img/naam.enc.png of .enc.jpg (versleuteld met de sleutel van de inhoud);
+ * - alleen in de bewerkmodus daarna ook img/naam.png of .jpg: een nieuwe afbeelding die nog niet
+ *   versleuteld is (de export versleutelt hem). Live nooit, zodat een vergeten afbeelding opvalt.
+ */
+function imageSources(name) {
+  if (demoMode) return [[`img_demo/${name}.png`, 'png', false], [`img_demo/${name}.jpg`, 'jpg', false]];
+  const out = [[`img/${name}.enc.png`, 'png', true], [`img/${name}.enc.jpg`, 'jpg', true]];
+  if (editMode) out.push([`img/${name}.png`, 'png', false], [`img/${name}.jpg`, 'jpg', false]);
+  return out;
+}
+
+/**
+ * Laadt een afbeelding (zie imageSources), één keer per naam. Daarna wordt een vel dat al hangt
+ * (met een tijdelijk leeg papier) bijgewerkt.
+ */
+function loadImage(name) {
+  if (images.has(name)) return;
+  images.set(name, (async () => {
+    const sources = imageSources(name);
+    let found = null;
+    let why = `niet gevonden: ${sources.map(([path]) => path).join(' of ')}`;
+    for (const [path, ext, encrypted] of sources) {
+      try {
+        let r, bytes;
+        try {
+          r = await fetch(path, { cache: 'no-store' });
+          if (r.ok) bytes = new Uint8Array(await r.arrayBuffer());
+        } catch {
+          why = `${path} kon niet worden geladen (verbinding verbroken?)`;
+          continue;
+        }
+        if (!r.ok) continue;
+        if (encrypted) bytes = await decryptBytes(bytes, contentKey);
+        const url = URL.createObjectURL(new Blob([bytes], { type: ext === 'png' ? 'image/png' : 'image/jpeg' }));
+        const img = new Image();
+        img.src = url;
+        await img.decode(); // ook: is het wel een afbeelding?
+        found = { ok: true, url, w: img.naturalWidth, h: img.naturalHeight, bytes, ext };
+        break;
+      } catch (err) {
+        why = err instanceof WrongPasswordError ? `${path} past niet bij dit wachtwoord` : `${path} is geen (geldige) afbeelding`;
+      }
+    }
+    if (!found) console.error(`Afbeelding "${name}" ${why}.`);
+    if (images.get(name) instanceof Promise) images.set(name, found ?? { ok: false, why }); // niet als er intussen geüpload is
+    if (pinShown?.image === name) renderPin(pinShown, false, 0, true);
+    if (els.imagesDialog.open) renderImagesList();
+  })());
+}
+
+let pinShown = null; // het pin-item dat nu hangt (of null)
+
+/** Kleine, vaste scheefstand per afbeelding (−1,6° tot 1,6°): elk vel hangt net anders. */
+function tiltOf(name) {
+  let h = 7;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ((h % 33) - 16) / 10;
+}
+
+/**
+ * Het formaat als de inhoud het niet zegt: het grootste waarop de afbeelding nog scherp is.
+ * Liggend en minstens 1600 pixels breed: A3; een lange zijde van minstens 1000 pixels: A4;
+ * kleiner: A5. (Een liggende A4 is op een 1920 pixels breed scherm zo'n 520 pixels breed.)
+ */
+const autoPaper = ({ w, h }) => (w >= h && w >= 1600 ? 'A3' : Math.max(w, h) >= 1000 ? 'A4' : 'A5');
+
+const warnedA3 = new Set(); // elke staande A3 één keer melden
+
+/** Papier en stand voor een pin-item. Zolang de afbeelding laadt: A4 liggend (of wat er staat). */
+function paperOf(item, info) {
+  const portrait = info?.ok === true && info.h > info.w;
+  let paper = item.paper ?? (info?.ok ? autoPaper(info) : 'A4');
+  if (paper === 'A3' && portrait) {
+    if (!warnedA3.has(item)) console.warn(`Afbeelding "${item.image}" is staand en A3 bestaat alleen liggend: A4 staand gebruikt.`);
+    warnedA3.add(item);
+    paper = 'A4';
+  }
+  return { paper, orient: portrait ? 'portrait' : 'landscape' };
+}
+
+/** Het vel papier voor een pin-item, met afbeelding (of een melding) en twee magneten. */
+function pinPaper(item) {
+  const info = images.get(item.image);
+  const paper = document.createElement('div');
+  paper.className = 'pin-paper';
+  const size = paperOf(item, info);
+  paper.dataset.paper = size.paper;
+  paper.dataset.orient = size.orient;
+  paper.style.transform = `rotate(${tiltOf(item.image)}deg)`;
+  if (info?.ok) {
+    const img = document.createElement('img');
+    img.src = info.url;
+    img.alt = item.text;
+    img.draggable = false;
+    paper.append(img);
+  } else {
+    // Laadt nog (leeg papier), of ontbreekt (een melding, zodat je het tijdens het voorbereiden ziet)
+    const note = document.createElement('p');
+    note.className = 'pin-missing';
+    note.textContent = info?.ok === false ? `Afbeelding "${item.image}" ${info.why}` : '';
+    note.setAttribute('role', 'img');
+    note.setAttribute('aria-label', item.text);
+    paper.append(note);
+  }
+  for (const side of ['left', 'right']) {
+    const magnet = document.createElement('i');
+    magnet.className = 'magnet magnet-' + side;
+    magnet.setAttribute('aria-hidden', 'true');
+    paper.append(magnet);
+  }
+  return paper;
+}
+
+/**
+ * Hangt item op (of haalt de afbeelding weg met null). animated: met beweging, na delay ms
+ * (gelijk met het geluid). force: opnieuw opbouwen, ook als hetzelfde item al hangt.
+ */
+function renderPin(item, animated, delay, force = false) {
+  if (item === pinShown && !force) return;
+  pinShown = item;
+  const layer = els.pinLayer;
+  const old = [...layer.querySelectorAll('.pin-paper:not(.leaving)')];
+  const paper = item ? pinPaper(item) : null;
+  if (!animated) {
+    layer.replaceChildren(...(paper ? [paper] : []));
+    return;
+  }
+  for (const el of old) unpinPaper(el, delay);
+  if (!paper) return;
+  layer.append(paper);
+  const tilt = tiltOf(item.image);
+  animate(paper, [
+    { opacity: 0, transform: `translate(-6px, -22px) rotate(${tilt + 2.5}deg) scale(1.03)`, boxShadow: '0 22px 30px rgba(0,0,0,.18)' },
+    { opacity: 1, offset: 0.35 },
+    { opacity: 1, transform: `rotate(${tilt}deg)`, boxShadow: '' },
+  ], { duration: 260, delay, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
+  // De magneten klikken erop: op het moment van de klikjes in pinUpSound (0,26 en 0,41 s).
+  paper.querySelectorAll('.magnet').forEach((magnet, i) => {
+    animate(magnet, [
+      { opacity: 0, transform: 'translate(3px, -16px) scale(1.35)' },
+      { opacity: 1, transform: 'translate(0, 0) scale(1)' },
+    ], { duration: 110, delay: delay + 150 + i * 150, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'backwards' });
+  });
+  els.pinAnnouncer.textContent = '';
+  setTimeout(() => { els.pinAnnouncer.textContent = 'Afbeelding: ' + item.text; }, 50);
+}
+
+/** Haalt een vel weg: eerst de magneten (een voor een), dan zakt het vel en verdwijnt. */
+function unpinPaper(paper, delay) {
+  paper.classList.add('leaving');
+  paper.querySelectorAll('.magnet').forEach((magnet, i) => {
+    animate(magnet, [
+      { opacity: 1, transform: 'translate(0, 0) scale(1)' },
+      { opacity: 0, transform: 'translate(2px, -12px) scale(1.2)' },
+    ], { duration: 100, delay: delay + i * 70, easing: 'ease-in', fill: 'forwards' });
+  });
+  const from = paper.style.transform;
+  animate(paper, [
+    { opacity: 1, transform: from },
+    { opacity: 0, transform: from + ' translate(4px, 18px)' },
+  ], { duration: 190, delay: delay + 150, easing: 'ease-in', fill: 'forwards' }, () => paper.remove());
 }
 
 /** Een donker scherm (start of einde) tonen of verbergen; onShown volgt als het volledig in beeld is. */
@@ -525,6 +747,7 @@ function updateButtons() {
   els.editBtn.disabled = !isContent(pos) || editing; // niets te bewerken op het start- of afsluitscherm
   els.agreementsBtn.disabled = !isContent(pos) || editing;
   els.agreementsEditBtn.disabled = !isContent(pos) || editing;
+  els.imagesBtn.disabled = editing;
   els.addSheetBtn.disabled = !isContent(pos) || editing;
   updateMoveButtons(editing);
   const full = deck.topics.length >= TOPICS_MAX;
@@ -1041,7 +1264,7 @@ const code = (t) => `<code>${t}</code>`;
  * hooguit één tekstvak open; zolang dat zo is, kun je niet bladeren.
  * label: naam van de groep; textLabel: naam van het tekstvak; help: regels uitleg (HTML).
  */
-function openTextEditor({ host, className = '', label, textLabel, text, help, onSave }) {
+function openTextEditor({ host, className = '', label, textLabel, text, help, validate, onSave }) {
   if (!editMode || textEditor || !isContent(pos)) return;
   finishAllAnimations();
   const box = document.createElement('div');
@@ -1059,7 +1282,7 @@ function openTextEditor({ host, className = '', label, textLabel, text, help, on
   const input = box.querySelector('textarea');
   input.setAttribute('aria-label', textLabel);
   input.value = text;
-  textEditor = { box, input, opener: document.activeElement, onSave };
+  textEditor = { box, input, opener: document.activeElement, validate, onSave };
 
   box.addEventListener('click', (e) => {
     e.stopPropagation(); // niet doorgeven aan wat eronder ligt (dat zou het tekstvak meteen weer openen)
@@ -1083,7 +1306,14 @@ function openTextEditor({ host, className = '', label, textLabel, text, help, on
 
 function closeTextEditor(save) {
   if (!textEditor) return;
-  const { box, input, opener, onSave } = textEditor;
+  const { box, input, opener, validate, onSave } = textEditor;
+  // Klopt er iets niet (validate geeft een zin), dan blijft het tekstvak open, met een melding.
+  const problem = save && validate ? validate(input.value) : null;
+  if (problem) {
+    showNotice(problem);
+    input.focus({ preventScroll: true });
+    return;
+  }
   textEditor = null;
   box.remove();
   if (save) onSave(input.value);
@@ -1105,7 +1335,10 @@ function openSheetEditor() {
       `lege regel ruimte, ${code('---')} lijn, ${code('-&gt;')} klik`,
       `${code('?')} vraag, ${code('!')} tip, ${code('+' + GOAL_IDS[0])} t/m ${code('+' + GOAL_IDS.at(-1))} doel afvinken`,
       `${code('[kleur]')} ${[...KEYWORD_COLORS].join(' ')}`,
+      `${code('@naam beschrijving')} afbeelding ophangen (formaat: ${code('[A3]')} ${code('[A4]')} ${code('[A5]')}), ${code('@-')} weghalen`,
     ],
+    // Een afbeelding heeft een geldige naam en een beschrijving nodig: anders niet opslaan.
+    validate: (text) => textToSteps(text, new Set()).flat().map((it) => pinProblem(it, IMAGE_NAME)).find(Boolean) ?? null,
     onSave: saveSheet,
   });
 }
@@ -1155,6 +1388,7 @@ function saveSheet(text) {
   dropRepeatedChecks(flat.filter((o) => o !== f).map((o) => ({ title: o.title, steps: o.steps.map((step) => [...step]) })), seen);
   const dropped = dropRepeatedChecks([{ title: f.title, steps }], seen);
   f.steps.splice(0, f.steps.length, ...steps); // dezelfde lijst als in deck
+  for (const item of steps.flat()) if (item.type === 'pin') loadImage(item.image);
   pos = { sheet: i, step: f.steps.length };
   render(null);
   if (dropped.length) {
@@ -1169,10 +1403,11 @@ function saveSheet(text) {
  * verplicht, dus leeg opslaan geldt als annuleren. onSave(waarde) volgt alleen bij een andere,
  * niet-lege waarde; daarna onDone. Bij annuleren onCancel (als die er is), anders blijft alles zo.
  */
-function editInPlace(el, { label, className, onSave, onDone, onCancel }) {
+function editInPlace(el, { label, className, maxLength, onSave, onDone, onCancel }) {
   const original = el.textContent;
   const input = document.createElement('input');
   input.type = 'text';
+  if (maxLength) input.maxLength = maxLength; // een langere bestaande tekst blijft staan; alleen typen stopt
   input.className = className + ' in-place'; // in-place: zie de waarschuwing bij sluiten
   input.value = original;
   input.setAttribute('aria-label', label);
@@ -1216,6 +1451,7 @@ function editTitle({ onDone, onCancel } = {}) {
   editInPlace(els.keywordTitle, {
     label: 'Titel van het vel',
     className: 'title-edit',
+    maxLength: SHEET_TITLE_MAX,
     onDone,
     onCancel,
     onSave: (value) => {
@@ -1314,6 +1550,7 @@ function editTopicName({ onDone, onCancel } = {}) {
   editInPlace(sticky, {
     label: 'Naam van het onderwerp',
     className: 'sticky-edit',
+    maxLength: TOPIC_NAME_MAX,
     onDone,
     onCancel,
     onSave: (value) => {
@@ -1381,16 +1618,19 @@ function topicsUpdated() {
 
 /**
  * Wat er op een vel of onderwerp staat, voor een bevestigingsvraag: "2 klikken, met 1 tip" of
- * (met sheetCount) "3 vellen, 18 klikken, met 3 tips en het afvinken van doel1".
+ * (met sheetCount) "3 vellen, 18 klikken, met 3 tips, 1 afbeelding en het afvinken van doel1".
  */
 function describeContent(steps, sheetCount = 0) {
   const count = (n, one, more) => `${n} ${n === 1 ? one : more}`;
   const items = steps.flat();
   const tips = items.filter((it) => it.type === 'tip').length;
   const goals = [...new Set(items.filter((it) => it.type === 'check').map((it) => it.goal))];
-  const extra = [tips ? count(tips, 'tip', 'tips') : '', goals.length ? 'het afvinken van ' + goals.join(' en ') : ''].filter(Boolean);
+  const pins = items.filter((it) => it.type === 'pin').length;
+  const extra = [tips ? count(tips, 'tip', 'tips') : '', pins ? count(pins, 'afbeelding', 'afbeeldingen') : '',
+    goals.length ? 'het afvinken van ' + goals.join(' en ') : ''].filter(Boolean);
   const head = (sheetCount ? count(sheetCount, 'vel', 'vellen') + ', ' : '') + count(steps.length, 'klik', 'klikken');
-  return head + (extra.length ? ', met ' + extra.join(' en ') : '');
+  const list = extra.length > 1 ? extra.slice(0, -1).join(', ') + ' en ' + extra.at(-1) : extra[0];
+  return head + (list ? ', met ' + list : '');
 }
 
 /* ---------- Verplaatsen (?edit) ---------- */
@@ -1604,6 +1844,8 @@ if (editMode) {
   els.addSheetBtn.addEventListener('click', () => addSheet());
   els.deleteSheetBtn.addEventListener('click', () => deleteSheet());
   els.agreementsEditBtn.addEventListener('click', () => openAgreementsEditor());
+  els.imagesBtn.hidden = false;
+  els.imagesBtn.addEventListener('click', () => openImagesDialog());
   els.agreementsBox.addEventListener('click', () => openAgreementsEditor());
   els.keywordSheet.addEventListener('click', () => openSheetEditor());
   // De titels (van het vel en van de presentatie) staan in de bewerkmodus in een knop (zie
@@ -1705,6 +1947,133 @@ const playCheck = () => queueSound(checkSound, 0.34);
 const playPickup = () => playIfQuiet(pickupSound, 0.18);
 const playStick = () => playIfQuiet(stickSound, 0.09);
 const playTap = () => playIfQuiet(tapSound, 0.07);
+const playPinUp = () => queueSound(pinUpSound, 0.5);
+const playPinDown = () => queueSound(pinDownSound, 0.32);
+
+/**
+ * Een vel papier tegen het whiteboard, dan twee magneten die erop klikken (0,26 en 0,41 s; zie
+ * renderPin). Het papier is een korte, zachte zwiep; een klik is een kort, hard tikje met een
+ * laag randje (zie magnetClick).
+ */
+function pinUpSound() {
+  try {
+    const ctx = getAudio();
+    const now = ctx.currentTime;
+    paperSwish(ctx, now, 0.2, 0.16);
+    magnetClick(ctx, now + 0.26, 1.0);
+    magnetClick(ctx, now + 0.41, 0.88);
+  } catch (err) {
+    console.warn('Ophanggeluid kon niet worden afgespeeld:', err);
+  }
+}
+
+/** Weghalen: subtiel. Twee heel zachte tikjes (magneten eraf) en een nauwelijks hoorbare zwiep. */
+function pinDownSound() {
+  try {
+    const ctx = getAudio();
+    const now = ctx.currentTime;
+    magnetClick(ctx, now, 1.15, 0.12);
+    magnetClick(ctx, now + 0.07, 1.05, 0.1);
+    paperSwish(ctx, now + 0.14, 0.16, 0.03);
+  } catch (err) {
+    console.warn('Weghaalgeluid kon niet worden afgespeeld:', err);
+  }
+}
+
+/** Papier dat langs het bord schuift: gefilterde ruis die aanzwelt en wegsterft. */
+function paperSwish(ctx, t, length, level) {
+  const noise = noiseSource(ctx, length);
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.Q.value = 0.7;
+  band.frequency.setValueAtTime(1600, t);
+  band.frequency.exponentialRampToValueAtTime(3200, t + length);
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(level, t + length * 0.35);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + length);
+  noise.connect(band).connect(env).connect(ctx.destination);
+  noise.start(t);
+  noise.stop(t + length);
+}
+
+/**
+ * Een magneet die tegen het bord klikt: een kort, hard tikje (metaal op een geëmailleerd bord)
+ * met een snel wegstervende toon erin, en eronder een korte, lage plof voor wat gewicht. De plof
+ * is een driehoeksgolf rond 200 Hz die snel zakt; de boventonen maken hem ook op laptopspeakers
+ * hoorbaar. Daarbovenop een heel kort metalig randje: zes blokgolven op niet-harmonische
+ * afstanden (zoals bij een synthetisch bekken), hoog gefilterd. Doordat ze niet harmonisch zijn
+ * en snel wegsterven, klinkt het als metaal en niet als een noot. De aanzet is fel: het tikje
+ * en het metaal staan meteen op volle sterkte (zonder aanloop), met daarvoor een knal van een
+ * paar milliseconden.
+ * pitch: kleine variatie per klik; level: luidheid (1 = vol).
+ */
+function magnetClick(ctx, t, pitch, level = 1) {
+  const snap = noiseSource(ctx, 0.008);
+  const snapHigh = ctx.createBiquadFilter();
+  snapHigh.type = 'highpass';
+  snapHigh.frequency.value = 3000;
+  const snapEnv = ctx.createGain();
+  snapEnv.gain.setValueAtTime(0.6 * level, t);
+  snapEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.006);
+  snap.connect(snapHigh).connect(snapEnv).connect(ctx.destination);
+  snap.start(t);
+  snap.stop(t + 0.008);
+
+  const knock = noiseSource(ctx, 0.03);
+  const high = ctx.createBiquadFilter();
+  high.type = 'highpass';
+  high.frequency.value = 1200;
+  const knockEnv = ctx.createGain();
+  knockEnv.gain.setValueAtTime(0.4 * level, t);
+  knockEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+  knock.connect(high).connect(knockEnv).connect(ctx.destination);
+  knock.start(t);
+  knock.stop(t + 0.03);
+
+  const ring = ctx.createOscillator();
+  ring.type = 'triangle';
+  ring.frequency.setValueAtTime(1350 * pitch, t);
+  ring.frequency.exponentialRampToValueAtTime(900 * pitch, t + 0.05);
+  const ringEnv = ctx.createGain();
+  ringEnv.gain.setValueAtTime(0.0001, t);
+  ringEnv.gain.exponentialRampToValueAtTime(0.12 * level, t + 0.002);
+  ringEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+  ring.connect(ringEnv).connect(ctx.destination);
+  ring.start(t);
+  ring.stop(t + 0.07);
+
+  const low = ctx.createOscillator();
+  low.type = 'triangle';
+  low.frequency.setValueAtTime(200 * pitch, t);
+  low.frequency.exponentialRampToValueAtTime(110 * pitch, t + 0.07);
+  const lowEnv = ctx.createGain();
+  lowEnv.gain.setValueAtTime(0.0001, t);
+  lowEnv.gain.exponentialRampToValueAtTime(0.45 * level, t + 0.003);
+  lowEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+  low.connect(lowEnv).connect(ctx.destination);
+  low.start(t);
+  low.stop(t + 0.09);
+
+  const metalBand = ctx.createBiquadFilter();
+  metalBand.type = 'bandpass';
+  metalBand.frequency.value = 4200;
+  metalBand.Q.value = 1.2;
+  const metalEnv = ctx.createGain();
+  metalEnv.gain.setValueAtTime(0.16 * level, t);
+  metalEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+  metalBand.connect(metalEnv).connect(ctx.destination);
+  for (const ratio of [2.0, 3.0, 4.16, 5.43, 6.79, 8.21]) {
+    const partial = ctx.createOscillator();
+    partial.type = 'square';
+    partial.frequency.value = 310 * ratio * pitch;
+    const mix = ctx.createGain();
+    mix.gain.value = 1 / 6;
+    partial.connect(mix).connect(metalBand);
+    partial.start(t);
+    partial.stop(t + 0.05);
+  }
+}
 
 /**
  * Doffe tik van de dop van een stift tegen het papier op de flip-over (bij aanwijzen). Gedempt:
@@ -2049,6 +2418,7 @@ document.addEventListener('keydown', (e) => {
   if (!deck || e.altKey) return;
   if (e.target.closest?.('input, select, textarea')) return; // tijdens typen of kiezen niet navigeren
   if (textEditor) return; // het tekstvak regelt zijn eigen toetsen
+  if (document.querySelector('dialog[open]')) return; // een venster ook (Esc sluit het, zie de browser)
   if (e.ctrlKey || e.metaKey) return; // combinaties met Ctrl of Cmd zijn van de browser (zoomen e.d.)
   const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown'];
   const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp'];
@@ -2143,12 +2513,187 @@ function readHash() {
   return { sheet, step: Math.min(Number(m[2]), max) };
 }
 
-/* ---------- Wijzigingen downloaden ---------- */
-// Op het afsluitscherm: wijkt de inhoud mét alle wijzigingen af van de geladen versie, dan
-// staat daar groot een downloadlink (onversleutelde JSON).
+/* ---------- Afbeeldingen: lijst, uploaden en verwijderen (?edit) ---------- */
+// De knop "Afbeeldingen" opent een venster met miniaturen: alle uploads en alle namen die de
+// inhoud ophangt (ook als het bestand ontbreekt of niet te ontsleutelen is; die staan er grijs).
+// Een klik op een miniatuur kopieert de code (@naam). Uploaden zet de afbeelding in het geheugen
+// (images), onder een naam uit de bestandsnaam; ze is meteen te gebruiken en gaat bij de export
+// versleuteld mee (alleen als de inhoud haar gebruikt). Bestaat de naam al, dan eerst de vraag
+// Vervangen/Annuleren. Verwijderen haalt de afbeelding uit de lijst en elk ophangen ervan uit de
+// inhoud (na een vraag); weghalen dat daardoor niets meer doet, verdwijnt bij de export.
 
-let downloadUrl = null;
-let exportedJson = null; // de inhoud zoals voor het laatst gedownload (JSON); null = nog nooit
+let uploadsPending = false; // uploads (of vervangingen) die nog niet geëxporteerd zijn
+
+/** Alle namen die de inhoud nu ophangt. */
+const usedImages = () => new Set(deck.topics.flatMap((t) => t.sheets.flatMap((sh) => sh.steps.flat())).filter((it) => it.type === 'pin').map((it) => it.image));
+
+/** Hoe vaak een afbeelding in de inhoud wordt opgehangen. */
+const pinCount = (name) => deck.topics.flatMap((t) => t.sheets.flatMap((sh) => sh.steps.flat())).filter((it) => it.type === 'pin' && it.image === name).length;
+
+function openImagesDialog() {
+  if (!editMode || textEditor) return;
+  for (const name of usedImages()) loadImage(name);
+  els.imagesStatus.textContent = '';
+  renderImagesList();
+  els.imagesDialog.showModal();
+}
+els.imagesClose.addEventListener('click', () => els.imagesDialog.close());
+els.imagesDialog.addEventListener('close', () => els.imagesBtn.focus({ preventScroll: true }));
+els.imagesUpload.addEventListener('click', () => els.imagesFile.click());
+els.imagesFile.addEventListener('change', async () => {
+  const files = [...els.imagesFile.files];
+  els.imagesFile.value = ''; // dezelfde naam nog eens kiezen moet ook een "change" geven
+  for (const file of files) await uploadImage(file);
+});
+
+function renderImagesList() {
+  const used = usedImages();
+  const names = [...new Set([...used, ...[...images].filter(([, info]) => info.uploaded).map(([name]) => name)])].sort();
+  const items = names.map((name) => {
+    const info = images.get(name);
+    const li = document.createElement('li');
+    li.className = 'image-tile';
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'image-copy';
+    copy.title = `Kopieer @${name}`;
+    const thumb = document.createElement('span');
+    thumb.className = 'image-thumb';
+    if (info?.ok) {
+      const img = document.createElement('img');
+      img.src = info.url;
+      img.alt = '';
+      thumb.append(img);
+    } else {
+      thumb.classList.toggle('broken', info?.ok === false);
+      thumb.textContent = info?.ok === false ? 'ontbreekt' : 'laden…';
+    }
+    const label = document.createElement('span');
+    label.className = 'image-name';
+    label.textContent = '@' + name;
+    const meta = document.createElement('span');
+    meta.className = 'image-meta';
+    const n = used.has(name) ? pinCount(name) : 0;
+    meta.textContent = [info?.uploaded ? 'geüpload' : '', n ? `${n}× opgehangen` : 'niet gebruikt', info?.ok ? `${info.w} × ${info.h}` : ''].filter(Boolean).join(' · ');
+    copy.append(thumb, label, meta);
+    copy.addEventListener('click', () => copyImageCode(name));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'image-delete';
+    del.textContent = 'Verwijderen';
+    del.setAttribute('aria-label', `Afbeelding ${name} verwijderen`);
+    del.addEventListener('click', () => deleteImage(name));
+    li.append(copy, del);
+    return li;
+  });
+  if (!items.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'Nog geen afbeeldingen. Upload er een, of hang er een op met @naam in het tekstvak van een vel.';
+    items.push(li);
+  }
+  els.imagesList.replaceChildren(...items);
+}
+
+async function copyImageCode(name) {
+  try {
+    await navigator.clipboard.writeText('@' + name + ' ');
+    els.imagesStatus.textContent = `Gekopieerd: @${name}`;
+  } catch {
+    els.imagesStatus.textContent = `Kopiëren lukte niet; de code is @${name}`;
+  }
+}
+
+/** "Mijn Kat.PNG" → "mijn-kat": kleine letters, zonder accenten; de rest wordt een streepje. */
+function imageNameOf(fileName) {
+  const base = fileName.replace(/\.[^.]*$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const name = base.replace(/[^a-z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^[-_]+|-+$/g, '');
+  return IMAGE_NAME.test(name) ? name : 'afbeelding';
+}
+
+async function uploadImage(file) {
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : null;
+  if (!ext) {
+    els.imagesStatus.textContent = `„${file.name}” is geen PNG of JPG; niet geüpload.`;
+    return;
+  }
+  const name = imageNameOf(file.name);
+  if (images.has(name) && !(await ask(`Er is al een afbeelding „${name}”. Vervangen door „${file.name}”?`, 'Vervangen'))) return;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const url = URL.createObjectURL(new Blob([bytes], { type: file.type }));
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    URL.revokeObjectURL(url);
+    els.imagesStatus.textContent = `„${file.name}” is geen geldige afbeelding; niet geüpload.`;
+    return;
+  }
+  const old = images.get(name);
+  if (old?.url) URL.revokeObjectURL(old.url);
+  images.set(name, { ok: true, url, w: img.naturalWidth, h: img.naturalHeight, bytes, ext, uploaded: true });
+  uploadsPending = true;
+  els.imagesStatus.textContent = `Geüpload als @${name}.`;
+  if (pinShown?.image === name) renderPin(pinShown, false, 0, true);
+  renderImagesList();
+  updateDownload();
+}
+
+/** Uit de lijst en uit de inhoud: elk ophangen van deze afbeelding verdwijnt (na een vraag). */
+async function deleteImage(name) {
+  const n = pinCount(name);
+  const question = n
+    ? `Afbeelding „${name}” verwijderen? Hij wordt ${n === 1 ? '1 keer' : n + ' keer'} opgehangen; dat verdwijnt mee.`
+    : `Afbeelding „${name}” verwijderen?`;
+  if (!(await ask(question, 'Verwijderen'))) return;
+  const old = images.get(name);
+  if (old?.url) URL.revokeObjectURL(old.url);
+  images.delete(name);
+  if (n) {
+    // Een klik die daardoor leeg wordt, valt weg; blijf op hetzelfde vel, hooguit op zijn laatste klik.
+    for (const topic of deck.topics) {
+      for (const sheet of topic.sheets) {
+        for (const step of sheet.steps) for (let k = 0; k < step.length; k++) if (step[k].type === 'pin' && step[k].image === name) step.splice(k--, 1);
+        sheet.steps.splice(0, sheet.steps.length, ...sheet.steps.filter((step) => step.length > 0));
+      }
+    }
+    const model = isContent(pos) ? flat[pos.sheet].model : null;
+    rebuildFlat();
+    if (model) {
+      const i = flat.findIndex((f) => f.model === model);
+      pos = { sheet: i, step: Math.min(pos.step, flat[i].steps.length) };
+    }
+    render(null);
+  }
+  els.imagesStatus.textContent = `Afbeelding „${name}” verwijderd.`;
+  renderImagesList();
+}
+
+/** Een vraag met de knoppen okLabel en Annuleren; true als er voor okLabel is gekozen. */
+function ask(text, okLabel) {
+  els.askText.textContent = text;
+  els.askOk.textContent = okLabel;
+  els.askDialog.returnValue = '';
+  els.askDialog.showModal();
+  els.askCancel.focus(); // veilig: Enter annuleert, tenzij je bewust naar de andere knop gaat
+  return new Promise((resolve) => {
+    els.askDialog.addEventListener('close', () => resolve(els.askDialog.returnValue === 'ok'), { once: true });
+  });
+}
+els.askForm.addEventListener('submit', (e) => { e.preventDefault(); els.askDialog.close('ok'); });
+els.askCancel.addEventListener('click', () => els.askDialog.close('cancel'));
+
+/* ---------- Wijzigingen versleuteld exporteren ---------- */
+// Op het afsluitscherm: wijkt de inhoud mét alle wijzigingen af van de geladen versie, dan staat
+// daar groot de knop "Versleuteld exporteren" (niet in de demo). Die opent een venster dat twee
+// keer om het wachtwoord vraagt; daarna gebeurt precies wat tools/encrypt.js doet: controleren
+// (dezelfde regels, ook of de afbeeldingen er zijn), versleutelen (de inhoud en elke gebruikte
+// afbeelding, met één sleutel), terug ontsleutelen ter controle. Het resultaat is een zip om over
+// de projectmap heen uit te pakken: content.enc.json en img/naam.enc.png (of .enc.jpg). Een
+// onversleutelde export is er niet.
+
+let exportedJson = null; // de inhoud zoals voor het laatst geëxporteerd (JSON); null = nog nooit
 
 // Waarschuwen bij sluiten of herladen zolang er wijzigingen zijn die nog niet via het
 // afsluitscherm zijn gedownload, of een tekstvak of invoerveld nog open staat. De browser toont
@@ -2160,24 +2705,130 @@ window.addEventListener('beforeunload', (e) => {
   // (titel, naam, doel) of een half getypte tip (live).
   const open = textEditor !== null || document.querySelector('.in-place') !== null
     || (!els.tipForm.hidden && els.tipInput.value.trim() !== '');
+  if (demoMode && !open) return; // de demo heeft geen export: er valt niets te bewaren
   const current = JSON.stringify(contentWithChanges());
-  if (!open && current === (exportedJson ?? JSON.stringify(rawContent))) return;
+  if (!open && !uploadsPending && current === (exportedJson ?? JSON.stringify(rawContent))) return;
   e.preventDefault();
   e.returnValue = ''; // voor oudere browsers
 });
-els.download.addEventListener('click', () => { exportedJson = JSON.stringify(contentWithChanges()); });
+const PASSWORD_WARNING = 'Let op: gebruik bij voorkeur een wachtwoord van 16 tekens of meer.'; // zoals tools/encrypt.js
+
+els.exportBtn.addEventListener('click', () => {
+  els.exportForm.reset();
+  updateExportForm();
+  // Geüploade afbeeldingen die de inhoud niet gebruikt, gaan niet mee: dat staat erbij.
+  const unused = [...images].filter(([name, info]) => info.uploaded && !usedImages().has(name)).map(([name]) => name);
+  els.exportUnused.hidden = unused.length === 0;
+  els.exportUnused.textContent = unused.length === 1
+    ? `Let op: de geüploade afbeelding „${unused[0]}” wordt niet gebruikt en gaat niet mee.`
+    : `Let op: ${unused.length} geüploade afbeeldingen worden niet gebruikt en gaan niet mee: ${unused.join(', ')}.`;
+  els.exportDialog.showModal(); // de focus gaat naar het eerste wachtwoordvak
+});
+els.exportCancel.addEventListener('click', () => els.exportDialog.close());
+els.exportDialog.addEventListener('close', () => els.exportBtn.focus({ preventScroll: true })); // ook na Esc
+els.exportPw1.addEventListener('input', updateExportForm);
+els.exportPw2.addEventListener('input', updateExportForm);
+els.exportForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!els.exportOk.disabled) exportEncrypted(els.exportPw1.value);
+});
+
+/** Exporteren kan pas als beide vakken gevuld en gelijk zijn; de melding zegt wat er nog mist. */
+function updateExportForm() {
+  const a = els.exportPw1.value;
+  const b = els.exportPw2.value;
+  els.exportOk.disabled = a === '' || a !== b;
+  els.exportStatus.classList.remove('error');
+  els.exportStatus.textContent = a && b && a !== b ? 'De wachtwoorden zijn niet gelijk.' : a && a.length < 16 ? PASSWORD_WARNING : '';
+}
+
+/** Zoals tools/encrypt.js: controleren, versleutelen, controleren; dan de zip downloaden. */
+async function exportEncrypted(password) {
+  const fail = (lines) => {
+    els.exportStatus.classList.add('error');
+    els.exportStatus.textContent = lines.join('\n');
+    els.exportOk.textContent = 'Exporteren';
+    els.exportOk.disabled = false;
+  };
+  els.exportOk.disabled = true;
+  els.exportOk.textContent = 'Bezig…';
+  els.exportStatus.classList.remove('error');
+  els.exportStatus.textContent = '';
+  try {
+    // Eerst weghalen wat niets doet (weghalen terwijl er niets hangt), dan dezelfde controle als
+    // het script; normalizeContent schoont content op zijn plek op.
+    const content = contentWithChanges();
+    dropDeadUnpins(content);
+    const check = normalizeContent(content);
+    const pins = check.content.topics.flatMap((t) => t.sheets.flatMap((sh) => sh.steps.flat())).filter((it) => it.type === 'pin');
+    const names = [...new Set(pins.map((it) => it.image))];
+    for (const name of names) {
+      loadImage(name);
+      await images.get(name); // laadt hij nog, dan wachten
+      if (!images.get(name).ok) check.errors.push(`afbeelding "${name}" ${images.get(name).why}.`);
+    }
+    if (check.errors.length) return fail(['Niet geëxporteerd: los eerst deze fouten op.', ...check.errors.map((err) => '• ' + err)]);
+
+    // Eén sleutel voor alles (zie crypto-core.js); ter controle alles weer ontsleutelen, de inhoud
+    // met het wachtwoord (zoals bij het inloggen) en de afbeeldingen met de sleutel daarvan.
+    const text = JSON.stringify(content);
+    const k = await newKey(password);
+    const payload = await encryptTextWith(text, k);
+    const checkKey = await payloadKey(payload, password);
+    if (await decryptTextWith(payload, checkKey) !== text) throw new Error('Controle mislukt: ontsleutelde inhoud wijkt af.');
+    const files = [{ name: 'content.enc.json', bytes: new TextEncoder().encode(JSON.stringify(payload, null, 2) + '\n') }];
+    for (const name of names) {
+      const { bytes, ext } = images.get(name);
+      const encrypted = await encryptBytes(bytes, k.key);
+      const back = await decryptBytes(encrypted, checkKey);
+      if (back.length !== bytes.length || back.some((b, i) => b !== bytes[i])) throw new Error(`Controle mislukt: afbeelding "${name}" wijkt af.`);
+      files.push({ name: `img/${name}.enc.${ext}`, bytes: encrypted });
+    }
+
+    const zipName = `presentatie-${new Date().toLocaleDateString('sv')}.zip`; // JJJJ-MM-DD, lokale datum
+    const url = URL.createObjectURL(await zipFiles(files));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = zipName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+    exportedJson = JSON.stringify(contentWithChanges());
+    uploadsPending = false;
+    els.exportDialog.close();
+    els.exportForm.reset();
+    const imgNote = names.length ? ` en ${names.length === 1 ? '1 afbeelding' : names.length + ' afbeeldingen'} in img/` : '';
+    els.endNote.textContent = `Geëxporteerd als ${zipName} (gecontroleerd): content.enc.json${imgNote}. Pak hem uit over de projectmap heen.`;
+  } catch (err) {
+    fail(['Niet geëxporteerd: ' + err.message]);
+  }
+}
+
+/**
+ * Haalt elke unpin weg waarbij het whiteboard al leeg is (in de volgorde van de presentatie),
+ * bijvoorbeeld na het verwijderen van een afbeelding. Een klik die daardoor leeg wordt, valt weg.
+ * Werkt op de JSON van contentWithChanges (op zijn plek).
+ */
+function dropDeadUnpins(content) {
+  let hanging = false;
+  for (const topic of content.topics) {
+    for (const sheet of topic.sheets) {
+      for (const step of sheet.steps) {
+        for (let k = 0; k < step.length; k++) {
+          if (step[k].type === 'pin') hanging = true;
+          else if (step[k].type === 'unpin') { if (hanging) hanging = false; else step.splice(k--, 1); }
+        }
+      }
+      sheet.steps = sheet.steps.filter((step) => step.length > 0);
+    }
+  }
+}
 
 function updateDownload() {
-  const link = els.download;
-  if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
-  const updated = isEnd(pos) ? contentWithChanges() : null;
-  const changed = updated !== null && JSON.stringify(updated) !== JSON.stringify(rawContent);
+  const updated = isEnd(pos) && !demoMode ? contentWithChanges() : null;
+  const changed = updated !== null && (uploadsPending || JSON.stringify(updated) !== JSON.stringify(rawContent));
   els.endDownload.hidden = !changed;
-  if (!changed) { link.removeAttribute('href'); return; }
-  downloadUrl = URL.createObjectURL(
-    new Blob([JSON.stringify(updated, null, 2) + '\n'], { type: 'application/json' })
-  );
-  link.href = downloadUrl;
+  if (!changed) return;
 
   // Tellen: wat er nu in het model staat, vergeleken met de items zoals geladen.
   const now = new Set(flat.flatMap((f) => f.steps.flat()));
@@ -2214,9 +2865,10 @@ function updateDownload() {
   if (agreementsChanged()) parts.push('de werkafspraken gewijzigd');
   if (goalsChanged()) parts.push('de doelen gewijzigd');
   if (deck.title !== loadedTitle) parts.push('de titel van de presentatie gewijzigd');
+  if (uploadsPending) parts.push('afbeeldingen geüpload of vervangen');
   const list = parts.length > 1 ? parts.slice(0, -1).join(', ') + ' en ' + parts.at(-1) : parts[0] ?? 'de indeling in klikken gewijzigd';
   els.endNote.textContent = `Je hebt ${list}. `
-    + 'Dit bestand is onversleuteld: zet het in de projectmap, versleutel het opnieuw en verwijder de download.';
+    + (exportedJson === JSON.stringify(updated) && !uploadsPending ? 'Dit is al geëxporteerd.' : 'Exporteer versleuteld en pak de zip uit over de projectmap heen.');
 }
 
 /** Zijn de doelen anders dan bij het laden? */
