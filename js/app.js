@@ -74,6 +74,8 @@ const els = {
   progress: $('#progress'),
   prev: $('#btn-prev'),
   next: $('#btn-next'),
+  prevSheet: $('#btn-prev-sheet'),
+  nextSheet: $('#btn-next-sheet'),
   startScreen: $('#start-screen'),
   endScreen: $('#end-screen'),
   endDownload: $('#end-download'),
@@ -432,6 +434,25 @@ function prev() {
   goTo(START); // vanaf de eerste inhoud terug naar het startscherm
 }
 
+/**
+ * Per vel bladeren (Shift+pijl links/rechts, Shift+PgUp/PgDn en de knoppen « en »). Vorig vel: midden op een vel eerst naar het
+ * begin ervan, aan het begin naar het begin van het vorige vel. Volgend vel: naar het begin van
+ * het volgende vel. Nooit naar het start- of afsluitscherm; vanaf het startscherm gaat "volgend
+ * vel" naar het eerste vel, vanaf het afsluitscherm "vorig vel" naar het begin van het laatste.
+ */
+function prevSheet() {
+  if (isStart(pos)) return;
+  if (isEnd(pos)) return goTo({ sheet: flat.length - 1, step: 0 });
+  if (pos.step > 0) return goTo({ sheet: pos.sheet, step: 0 });
+  if (pos.sheet > 0) goTo({ sheet: pos.sheet - 1, step: 0 });
+}
+
+function nextSheet() {
+  if (isEnd(pos)) return;
+  if (isStart(pos)) return goTo(firstContent());
+  if (pos.sheet < flat.length - 1) goTo({ sheet: pos.sheet + 1, step: 0 });
+}
+
 function goTo(target) {
   if (textEditor) return; // eerst opslaan of annuleren
   if (target.sheet === pos.sheet && target.step === pos.step) return;
@@ -748,6 +769,8 @@ function updateButtons() {
   b.textContent = label ? label + ' ›' : '›';
   b.title = isStart(pos) ? 'Presentatie starten (→)' : label ? 'Naar het afsluitscherm (→)' : 'Volgende (→)';
   els.prev.disabled = isStart(pos) || editing;
+  els.prevSheet.disabled = editing || isStart(pos) || (isContent(pos) && pos.sheet === 0 && pos.step === 0);
+  els.nextSheet.disabled = editing || isEnd(pos) || (isContent(pos) && pos.sheet === flat.length - 1);
   const currentTopic = isContent(pos) ? flat[pos.sheet].topic : -1;
   stickies.forEach((sticky, t) => {
     sticky.disabled = editing;
@@ -2446,12 +2469,17 @@ document.addEventListener('keydown', (e) => {
   if (textEditor) return; // het tekstvak regelt zijn eigen toetsen
   if (document.querySelector('dialog[open]')) return; // een venster ook (Esc sluit het, zie de browser)
   if (e.ctrlKey || e.metaKey) return; // combinaties met Ctrl of Cmd zijn van de browser (zoomen e.d.)
+  // Per klik: pijltoetsen en PgUp/PgDn (dat sturen de meeste presenter-clickers). Per vel: dezelfde
+  // toetsen met Shift (pijl links/rechts en PgUp/PgDn). Shift doet daarmee op een pagina niets, en
+  // botst met geen browser of besturingssysteem (Ctrl+PgUp/PgDn wisselt van tabblad).
   const nextKeys = ['ArrowRight', 'ArrowDown', 'PageDown'];
   const prevKeys = ['ArrowLeft', 'ArrowUp', 'PageUp'];
-  if (nextKeys.includes(e.key)) { e.preventDefault(); next(); }
+  const sheetKeys = { ArrowRight: nextSheet, PageDown: nextSheet, ArrowLeft: prevSheet, PageUp: prevSheet };
+  if (e.shiftKey && sheetKeys[e.key]) { e.preventDefault(); sheetKeys[e.key](); }
+  else if (nextKeys.includes(e.key)) { e.preventDefault(); next(); }
   else if (prevKeys.includes(e.key)) { e.preventDefault(); prev(); }
   else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
-  else if (isStart(pos)) return; // op het startscherm werken alleen Start en volledig scherm
+  else if (isStart(pos)) return; // op het startscherm werken alleen Start, volgend vel en volledig scherm
   else if (e.key === 'w' || e.key === 'W') toggleAgreements();
   // T: tipveld (live; in de bewerkmodus gaan tips via het tekstvak van het vel). preventDefault
   // voorkomt dat de t zelf in het zojuist gefocuste tipveld belandt.
@@ -2465,6 +2493,8 @@ document.addEventListener('keydown', (e) => {
 
 els.next.addEventListener('click', (e) => { e.currentTarget.blur(); next(); });
 els.prev.addEventListener('click', (e) => { e.currentTarget.blur(); prev(); });
+els.nextSheet.addEventListener('click', (e) => { e.currentTarget.blur(); nextSheet(); });
+els.prevSheet.addEventListener('click', (e) => { e.currentTarget.blur(); prevSheet(); });
 $('#btn-full').addEventListener('click', (e) => { e.currentTarget.blur(); toggleFullscreen(); });
 els.agreementsBtn.addEventListener('click', (e) => { e.currentTarget.blur(); toggleAgreements(); });
 
