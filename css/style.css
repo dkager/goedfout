@@ -51,6 +51,10 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* Demo: tijdens het laden geen loginscherm en geen donkere achtergrond, maar de kleur van de muur
+   (zie het script in de head van index.html) */
+.demo #login { display: none; }
+.demo body { background: var(--wall); }
 body {
   background: #2b2925;
   font-family: var(--ui);

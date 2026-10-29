@@ -167,7 +167,10 @@ if (demoMode) document.getElementById('demo-badge').hidden = false;
 if (!demoMode) els.password.focus();
 
 if (demoMode) {
-  loadContent().then(start).catch((err) => { els.loginError.textContent = err.message; });
+  loadContent().then(start).catch((err) => {
+    els.loginError.textContent = err.message;
+    document.documentElement.classList.remove('demo'); // het loginscherm (met de fout) weer tonen
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -766,8 +769,11 @@ function updateButtons() {
   b.classList.toggle('labeled', label !== null);
   const editing = textEditor !== null; // zolang een tekstvak open is: niet bladeren (zie goTo)
   b.disabled = isEnd(pos) || editing;
-  b.textContent = label ? label + ' ›' : '›';
-  b.title = isStart(pos) ? 'Presentatie starten (→)' : label ? 'Naar het afsluitscherm (→)' : 'Volgende (→)';
+  // Als pijl: het teken verborgen voor schermlezers, de tooltip is dan de naam ("Volgende stap");
+  // als Start of Einde is de zichtbare tekst de naam en de tooltip een beschrijving
+  if (label) b.textContent = label + ' ›';
+  else b.innerHTML = '<span aria-hidden="true">›</span>';
+  b.title = isStart(pos) ? 'Presentatie starten' : label ? 'Naar het afsluitscherm' : 'Volgende stap';
   els.prev.disabled = isStart(pos) || editing;
   els.prevSheet.disabled = editing || isStart(pos) || (isContent(pos) && pos.sheet === 0 && pos.step === 0);
   els.nextSheet.disabled = editing || isEnd(pos) || (isContent(pos) && pos.sheet === flat.length - 1);

@@ -11,6 +11,9 @@
   <link rel="preload" href="fonts/caveat-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/permanent-marker-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
+  <!-- Demo (?demo) vóór het eerste beeld herkennen: dan geen (donker) loginscherm tijdens het laden.
+       Een gewoon script in de head draait vóórdat de browser tekent; het modulescript van de app niet. -->
+  <script>if (new URLSearchParams(location.search).has('demo')) document.documentElement.classList.add('demo');</script>
 </head>
 <body>
   <!-- Wachtwoordscherm -->
@@ -181,11 +184,13 @@
     </dialog>
 
     <nav class="controls" aria-label="Bediening">
-      <button id="btn-prev-sheet" aria-label="Vorig vel" aria-keyshortcuts="Shift+ArrowLeft Shift+PageUp" title="Vorig vel (Shift+← of Shift+PgUp)">«</button>
-      <button id="btn-prev" title="Vorige (←)">‹</button>
+      <!-- De pijltekens zijn voor schermlezers verborgen: dan is de tooltip (title) de naam, en niet
+           ook nog eens een beschrijving met dezelfde tekst -->
+      <button id="btn-prev-sheet" title="Vorig vel"><span aria-hidden="true">«</span></button>
+      <button id="btn-prev" title="Vorige stap"><span aria-hidden="true">‹</span></button>
       <span id="progress"></span>
-      <button id="btn-next" title="Volgende (→)">›</button>
-      <button id="btn-next-sheet" aria-label="Volgend vel" aria-keyshortcuts="Shift+ArrowRight Shift+PageDown" title="Volgend vel (Shift+→ of Shift+PgDn)">»</button>
+      <button id="btn-next" title="Volgende stap"><span aria-hidden="true">›</span></button>
+      <button id="btn-next-sheet" title="Volgend vel"><span aria-hidden="true">»</span></button>
       <button id="btn-agreements" class="labeled" aria-pressed="false" aria-controls="agreements"
               aria-keyshortcuts="W" title="Werkafspraken tonen of verbergen (W)">Werkafspraken</button>
       <button id="btn-full" aria-label="Volledig scherm" aria-keyshortcuts="F" title="Volledig scherm (F)">⛶</button>
